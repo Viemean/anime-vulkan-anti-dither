@@ -2,6 +2,7 @@
 #include <vulkan/vk_layer.h>
 
 #include "wuwa_anti_dither.h"
+#include "azur_promilia_anti_dither.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -16,6 +17,14 @@ namespace {
   // Helper to extract dispatch key from dispatchable handles
   inline void* get_dispatch_key(const void* object) {
     return *(void**)object;
+  }
+
+  inline void dispatch_anti_dither_process(uint32_t* code, size_t word_count) {
+    if (game_logger::is_azur_promilia()) {
+      azur_promilia_layer::process_spirv_anti_dither(code, word_count);
+    } else {
+      wuwa_layer::process_spirv_anti_dither(code, word_count);
+    }
   }
 
   struct InstanceData {
@@ -83,7 +92,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateShaderModule(
     size_t word_count = pCreateInfo->codeSize / sizeof(uint32_t);
     std::vector<uint32_t> patched_code(pCreateInfo->pCode, pCreateInfo->pCode + word_count);
 
-    wuwa_layer::process_spirv_anti_dither(patched_code.data(), patched_code.size());
+    dispatch_anti_dither_process(patched_code.data(), patched_code.size());
 
     VkShaderModuleCreateInfo modified_info = *pCreateInfo;
     modified_info.pCode = patched_code.data();
@@ -147,7 +156,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
         patched_codes[i][s].assign(mod_info->pCode, mod_info->pCode + word_count);
 
         if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT) {
-          wuwa_layer::process_spirv_anti_dither(patched_codes[i][s].data(), patched_codes[i][s].size());
+          dispatch_anti_dither_process(patched_codes[i][s].data(), patched_codes[i][s].size());
         }
 
         modified_module_infos[i][s] = *mod_info;

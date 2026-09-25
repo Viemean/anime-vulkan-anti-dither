@@ -1,4 +1,5 @@
 #include "../src/wuwa_anti_dither.h"
+#include "../src/azur_promilia_anti_dither.h"
 #include <cassert>
 #include <iostream>
 #include <vector>
@@ -354,6 +355,66 @@ void test_dx11_modulo_function_call_dither() {
   std::cout << "PASSED\n";
 }
 
+void test_azur_promilia_pipeline() {
+  std::cout << "[Test 8] Azur Promilia Hierarchical Range Anti-Dither Rules... ";
+  
+  // 1. UberShader (> 3000 DW) -> NOP
+  {
+    std::vector<uint32_t> spv(3200, make_op(1, 0));
+    spv[0] = azur_promilia_layer::SPV_HEADER_MAGIC;
+    spv[3] = 100;
+    spv[10] = make_op(1, azur_promilia_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION);
+    azur_promilia_layer::process_spirv_anti_dither(spv.data(), spv.size());
+    assert((spv[10] & 0xFFFF) == azur_promilia_layer::SPV_OP_NOP);
+  }
+
+  // 2. Secondary Pass (815 DW) -> NOP
+  {
+    std::vector<uint32_t> spv(815, make_op(1, 0));
+    spv[0] = azur_promilia_layer::SPV_HEADER_MAGIC;
+    spv[3] = 100;
+    spv[10] = make_op(1, azur_promilia_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION);
+    azur_promilia_layer::process_spirv_anti_dither(spv.data(), spv.size());
+    assert((spv[10] & 0xFFFF) == azur_promilia_layer::SPV_OP_NOP);
+  }
+
+  // 3. Crop Protection (114, 185, 339 DW) -> Preserved (NOT NOP)
+  {
+    for (size_t crop_len : {114, 185, 339}) {
+      std::vector<uint32_t> spv(crop_len, make_op(1, 0));
+      spv[0] = azur_promilia_layer::SPV_HEADER_MAGIC;
+      spv[3] = 100;
+      spv[10] = make_op(1, azur_promilia_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION);
+      azur_promilia_layer::process_spirv_anti_dither(spv.data(), spv.size());
+      assert((spv[10] & 0xFFFF) == azur_promilia_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION);
+    }
+  }
+
+  // 4. Eyes & Micro Close-up Pass (233 DW, 450 DW) -> NOP
+  {
+    for (size_t eye_len : {233, 450}) {
+      std::vector<uint32_t> spv(eye_len, make_op(1, 0));
+      spv[0] = azur_promilia_layer::SPV_HEADER_MAGIC;
+      spv[3] = 100;
+      spv[10] = make_op(1, azur_promilia_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION);
+      azur_promilia_layer::process_spirv_anti_dither(spv.data(), spv.size());
+      assert((spv[10] & 0xFFFF) == azur_promilia_layer::SPV_OP_NOP);
+    }
+  }
+
+  // 5. Standard World Tree / Foliage (1200 DW) -> Preserved (NOT NOP)
+  {
+    std::vector<uint32_t> spv(1200, make_op(1, 0));
+    spv[0] = azur_promilia_layer::SPV_HEADER_MAGIC;
+    spv[3] = 100;
+    spv[10] = make_op(1, azur_promilia_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION);
+    azur_promilia_layer::process_spirv_anti_dither(spv.data(), spv.size());
+    assert((spv[10] & 0xFFFF) == azur_promilia_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION);
+  }
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Vulkan Anti-Dither SSA Unit Tests ===\n";
   test_camera_dither_fragcoord_kill();
@@ -363,6 +424,7 @@ int main() {
   test_hash_blacklist_whitelist();
   test_dx11_ign_function_call_dither();
   test_dx11_modulo_function_call_dither();
+  test_azur_promilia_pipeline();
   std::cout << "=== All Anti-Dither Tests Passed Successfully ===\n";
   return 0;
 }

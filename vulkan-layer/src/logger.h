@@ -207,6 +207,12 @@ namespace game_logger {
           g_detected_process.find("ZenlessZoneZero") != std::string::npos ||
           g_detected_process.find("BH3") != std::string::npos ||
           g_detected_process.find("Honkai Impact 3") != std::string::npos ||
+          // Azur Promilia (UE)
+          g_detected_process.find("AzurPromilia") != std::string::npos ||
+          g_detected_process.find("Azur Promilia") != std::string::npos ||
+          g_detected_process.find("azur_promilia") != std::string::npos ||
+          g_detected_process.find("AP-Win64") != std::string::npos ||
+          g_detected_process.find("Promilia") != std::string::npos ||
           // Other Anime / UE / Unity Games
           g_detected_process.find("Snowbreak") != std::string::npos ||
           g_detected_process.find("DuetNightAbyss") != std::string::npos ||
@@ -242,6 +248,15 @@ namespace game_logger {
   inline bool is_active() {
     init_config();
     return g_enabled;
+  }
+
+  inline bool is_azur_promilia() {
+    init_config();
+    return g_detected_process.find("AzurPromilia") != std::string::npos ||
+           g_detected_process.find("Azur Promilia") != std::string::npos ||
+           g_detected_process.find("azur_promilia") != std::string::npos ||
+           g_detected_process.find("AP-Win64") != std::string::npos ||
+           g_detected_process.find("Promilia") != std::string::npos;
   }
 
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {
