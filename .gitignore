@@ -10,6 +10,6 @@ vulkan-layer/subprojects/*
 *.tmp
 
 /DOCS_WUWA_ANTI_DITHER.md
-/.agents/
 /upstream/
+/release.sh
 
