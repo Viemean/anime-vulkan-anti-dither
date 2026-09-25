@@ -18,7 +18,6 @@ ninja -C "${BUILD_DIR}"
 mkdir -p "${DIST_DIR}"
 cp "${BUILD_DIR}/libwuwa_antidither_layer.so" "${DIST_DIR}/libwuwa_antidither_layer.so"
 
-# 生成发布包的相对路径版 JSON (适用于免安装同目录放置或便携分发)
 sed 's|@LIBRARY_PATH@|./libwuwa_antidither_layer.so|g' \
     "${SCRIPT_DIR}/manifest/VkLayer_WUWA_antidither.json.in" \
     > "${DIST_DIR}/VkLayer_WUWA_antidither.json"

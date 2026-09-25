@@ -1,47 +1,41 @@
-# 《鸣潮》Vulkan 反虚化驱动层 (WuWa Vulkan Anti-Dither Layer)
+# Vulkan 反虚化驱动层
 
-基于 Khronos Vulkan Layer 规范与 SPIR-V 运行时 SSA 数据流分析实现的《鸣潮》近身网格消隐中和驱动层。
+基于 Vulkan Layer 规范与 SPIR-V 运行时字节码分析实现游戏的反虚化插件。工作在系统 Vulkan Loader 与显卡驱动之间，不修改游戏本体文件。
 
-## 特性说明
+## 特性
 
-- **驱动层拦截**：工作在系统 Vulkan Loader 与显卡驱动之间，不修改游戏目录内的任何文件。
-- **双管线支持**：同时支持 DX11（通过 DXVK）与 DX12（通过 vkd3d-proton），无需切换补丁。
-- **模组兼容**：与 WWMI（3DMigoto）等 Mod 工具解耦，不产生 DLL 链式加载冲突。
-- **精准过滤**：基于单遍向前的 SSA 数据流依赖分析，仅中和相机点阵消隐（`OpKill` / `OpDemote`），保留头发、草木镂空等 Alpha Cutout 材质。
-- **针对性激活**：自动读取 `/proc/self/cmdline` 匹配游戏主程序，非目标程序直接直通，无额外性能开销。
+- **无侵入性**：驱动层拦截着色器创建，不修改游戏客户端文件。
+- **管线兼容**：同时兼容 DX11（DXVK）与 DX12（vkd3d-proton）。
+- **模组兼容**：与 3DMigoto / WWMI 解耦，无 DLL 链式加载冲突。
+- **精准过滤**：通过 SSA 数据流分析仅中和相机点阵消隐（`OpKill` / `OpDemote`），保留贴图 Alpha Cutout 镂空。
+- **按需激活**：读取 `/proc/self/cmdline` 匹配游戏进程，非目标程序直通运行。
 
----
+## 安装使用
 
-## 产物下载与安装
+### 1. 下载与安装
 
-直接在 [Releases](https://github.com/SpectrumQT/wuwa-anti-dither/releases) 页面下载构建好的发布包：`wuwa-vulkan-layer.tar.gz`。
-
-### 1. 自动安装
-
-解压发布包并在终端中执行：
+从 Releases 页面下载 `wuwa-vulkan-layer.tar.gz`，解压后运行安装脚本：
 
 ```bash
+tar -xvf wuwa-vulkan-layer.tar.gz
 ./install.sh
 ```
 
-脚本将动态库与 Layer 描述清单注册至当前用户的 Vulkan 目录：
-- `~/.local/share/vulkan/implicit_layer.d/`
-- `~/.local/share/vulkan/explicit_layer.d/`
+脚本将驱动层注册至用户 Vulkan 隐式层目录（`~/.local/share/vulkan/implicit_layer.d/`）。
 
-### 2. 容器沙盒穿透配置 (Lutris / Steam)
+### 2. 启动配置（容器沙盒环境）
 
-在 Linux 环境下，Steam Runtime 或 Lutris（使用 `umu-run`）运行于 Bubblewrap 沙盒（`pressure-vessel`）内，沙盒默认覆盖了用户隐式层目录。需要在启动项中显式注入 Layer 路径：
+在 Steam Runtime 或 Lutris（使用 `umu-run`）等沙盒环境中，如隐式层未自动加载，需在启动项或环境变量中显式指定路径：
 
-- **Lutris 配置**：
-  进入游戏配置 -> 系统选项 -> 环境变量（Environment variables），添加：
+- **Steam 启动选项**：
+  ```bash
+  VK_ADD_IMPLICIT_LAYER_PATH="$HOME/.local/share/vulkan/implicit_layer.d" VK_LAYER_PATH="$HOME/.local/share/vulkan/implicit_layer.d" VK_INSTANCE_LAYERS="VK_LAYER_WUWA_antidither" %command%
+  ```
+- **Lutris 环境变量**：
   ```text
   VK_ADD_IMPLICIT_LAYER_PATH = /home/<用户名>/.local/share/vulkan/implicit_layer.d
   VK_LAYER_PATH = /home/<用户名>/.local/share/vulkan/implicit_layer.d
   VK_INSTANCE_LAYERS = VK_LAYER_WUWA_antidither
-  ```
-- **Steam 启动选项**：
-  ```bash
-  VK_ADD_IMPLICIT_LAYER_PATH="$HOME/.local/share/vulkan/implicit_layer.d" VK_LAYER_PATH="$HOME/.local/share/vulkan/implicit_layer.d" VK_INSTANCE_LAYERS="VK_LAYER_WUWA_antidither" %command%
   ```
 
 ### 3. 卸载
@@ -49,28 +43,28 @@
 ```bash
 ./uninstall.sh
 ```
+### 4. 支持的游戏
 
----
+- 鸣潮（DXVK / VKD3D）
+- 蓝色星原：旅谣（DXVK）
 
-## 运行日志验证
+## 运行验证
 
-驱动层支持宿主与容器沙盒双向同步日志：
+查看驱动层日志：
 
 ```bash
 cat ~/.local/share/wuwa_vulkan_layer.log
 ```
 
-输出示例：
+日志输出示例：
 ```text
 [WuWa-Vulkan-Layer] Process: ...Client-Win64-Shipping.exe | Enabled: 1 | Dump: 0
 [WuWa-Vulkan-Layer] WordCount: 5181 | DitherNOP: 2 | CutoutKept: 0
 ```
-- `DitherNOP > 0`：表示相机近身遮挡消隐指令已成功中和；
-- `CutoutKept > 0`：表示贴图 Alpha 镂空材质已正常保留。
+- `DitherNOP > 0`：表示相机消隐指令已中和。
+- `CutoutKept > 0`：表示材质 Alpha 镂空已保留。
 
----
-
-## 本地编译
+## 源码编译
 
 依赖：`meson`、`ninja`、`gcc`/`clang`、`vulkan-headers`。
 
@@ -78,5 +72,4 @@ cat ~/.local/share/wuwa_vulkan_layer.log
 ./vulkan-layer/build.sh
 ```
 
-构建产物输出至 `vulkan-layer/dist/` 目录。
-
+编译产物输出至 `vulkan-layer/dist/`。
