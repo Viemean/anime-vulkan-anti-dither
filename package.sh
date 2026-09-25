@@ -15,7 +15,7 @@ if [[ -f "${VULKAN_DIR}/meson.build" ]]; then
     fi
 fi
 
-if git describe --tags --exact-match 2>/dev/null; then
+if git describe --tags --exact-match >/dev/null 2>&1; then
     GIT_TAG=$(git describe --tags --exact-match)
     VERSION="${GIT_TAG#v}"
 fi
@@ -45,11 +45,9 @@ chmod +x "${PORTABLE_DIR}/install.sh" "${PORTABLE_DIR}/uninstall.sh"
 
 echo "==> [2/4] 打包通用便携压缩包 (.tar.gz / .tar.zst)..."
 tar -czf "${OUT_DIR}/vulkan-anti-dither-${VERSION}-x86_64.tar.gz" -C "${TMP_PKG_DIR}" vulkan-anti-dither
-ln -sf "vulkan-anti-dither-${VERSION}-x86_64.tar.gz" "${OUT_DIR}/vulkan-anti-dither-latest-x86_64.tar.gz"
 
 if command -v zstd >/dev/null 2>&1; then
     tar -I 'zstd -19 -T0' -cf "${OUT_DIR}/vulkan-anti-dither-${VERSION}-x86_64.tar.zst" -C "${TMP_PKG_DIR}" vulkan-anti-dither
-    ln -sf "vulkan-anti-dither-${VERSION}-x86_64.tar.zst" "${OUT_DIR}/vulkan-anti-dither-latest-x86_64.tar.zst"
 fi
 
 echo "==> [3/4] 构建 Debian 安装包 (.deb)..."
@@ -104,7 +102,6 @@ chmod 0755 "${DEB_ROOT}/DEBIAN/postrm"
 
 if command -v dpkg-deb >/dev/null 2>&1; then
     dpkg-deb --build --root-owner-group "${DEB_ROOT}" "${OUT_DIR}/vulkan-anti-dither_${VERSION}_amd64.deb"
-    ln -sf "vulkan-anti-dither_${VERSION}_amd64.deb" "${OUT_DIR}/vulkan-anti-dither_latest_amd64.deb"
 else
     echo "警告: 系统未找到 dpkg-deb 工具，跳过 .deb 构建"
 fi
