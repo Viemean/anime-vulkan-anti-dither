@@ -1,0 +1,62 @@
+name: Build Vulkan Anti-Dither Layer
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux/archlinux:base-devel
+
+    steps:
+      - name: Setup build environment
+        run: |
+          pacman -Syu --needed --noconfirm git curl meson ninja gcc tar vulkan-headers
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Vulkan Layer
+        run: |
+          chmod +x vulkan-layer/build.sh vulkan-layer/install.sh vulkan-layer/uninstall.sh
+          ./vulkan-layer/build.sh
+          mkdir -p release-pkg/vulkan-layer
+          cp -fv vulkan-layer/dist/* release-pkg/vulkan-layer/
+          cp -fv vulkan-layer/install.sh release-pkg/vulkan-layer/
+          cp -fv vulkan-layer/uninstall.sh release-pkg/vulkan-layer/
+          cd release-pkg/vulkan-layer
+          tar -czvf ../../wuwa-vulkan-layer.tar.gz ./*
+          cd ../..
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wuwa-vulkan-layer
+          path: |
+            vulkan-layer/dist/*
+            wuwa-vulkan-layer.tar.gz
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            wuwa-vulkan-layer.tar.gz
+            vulkan-layer/dist/libwuwa_antidither_layer.so
+            vulkan-layer/dist/VkLayer_WUWA_antidither.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

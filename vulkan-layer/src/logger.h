@@ -1,0 +1,306 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstdarg>
+#include <ctime>
+#include <string>
+#include <vector>
+#include <unordered_set>
+#include <fstream>
+#include <sstream>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <mutex>
+#include <string_view>
+
+namespace game_logger {
+
+  inline std::mutex& get_logger_mutex() {
+    static std::mutex s_mutex;
+    return s_mutex;
+  }
+
+  static bool g_initialized = false;
+  static bool g_enabled = false;
+  static bool g_dump_enabled = false;
+  static std::string g_detected_process;
+  static std::string g_clean_process_name;
+  static std::unordered_set<uint32_t> g_exclude_hashes;
+  static std::unordered_set<uint32_t> g_force_hashes;
+
+  inline void make_dirs(const std::string& path) {
+    std::string current;
+    for (size_t i = 0; i < path.length(); ++i) {
+      current += path[i];
+      if (path[i] == '/' || i == path.length() - 1) {
+        if (!current.empty() && current != "/") {
+          mkdir(current.c_str(), 0777);
+        }
+      }
+    }
+  }
+
+  inline std::string get_process_name() {
+    std::ifstream cmdline("/proc/self/cmdline");
+    if (!cmdline.is_open())
+      return "";
+    std::string s;
+    std::getline(cmdline, s, '\0');
+    return s;
+  }
+
+  inline std::string get_clean_process_name() {
+    if (!g_clean_process_name.empty())
+      return g_clean_process_name;
+
+    std::string full = get_process_name();
+    if (full.empty())
+      return "generic_game";
+
+    size_t p = full.find_last_of("/\\");
+    std::string base = (p == std::string::npos) ? full : full.substr(p + 1);
+    if (base.size() > 4 && base.substr(base.size() - 4) == ".exe")
+      base = base.substr(0, base.size() - 4);
+
+    for (char& c : base) {
+      if (c == ' ' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|')
+        c = '_';
+    }
+
+    g_clean_process_name = base;
+    return g_clean_process_name;
+  }
+
+  inline void log_msg(const char* fmt, ...) {
+    std::lock_guard<std::mutex> lock(get_logger_mutex());
+    va_list args;
+    std::string proc = get_clean_process_name();
+    const char* home = std::getenv("HOME");
+
+    std::string tmp_dir = "/tmp/game_anti_dither/logs";
+    make_dirs(tmp_dir);
+    std::string tmp_log = tmp_dir + "/" + proc + ".log";
+    std::string tmp_latest = tmp_dir + "/latest.log";
+
+    std::string home_log, home_latest;
+    if (home) {
+      std::string home_dir = std::string(home) + "/.local/share/game_anti_dither/logs";
+      make_dirs(home_dir);
+      home_log = home_dir + "/" + proc + ".log";
+      home_latest = home_dir + "/latest.log";
+    }
+
+    char time_buf[64];
+    std::time_t t = std::time(nullptr);
+    std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", std::localtime(&t));
+
+    FILE* files[4] = {
+      std::fopen(tmp_log.c_str(), "a"),
+      std::fopen(tmp_latest.c_str(), "a"),
+      home_log.empty() ? nullptr : std::fopen(home_log.c_str(), "a"),
+      home_latest.empty() ? nullptr : std::fopen(home_latest.c_str(), "a")
+    };
+
+    va_start(args, fmt);
+    for (int idx = 0; idx < 4; ++idx) {
+      if (files[idx]) {
+        std::fprintf(files[idx], "[%s] ", time_buf);
+        va_list a;
+        va_copy(a, args);
+        std::vfprintf(files[idx], fmt, a);
+        va_end(a);
+        std::fclose(files[idx]);
+      }
+    }
+    va_end(args);
+  }
+
+  inline void parse_hash_list(const char* env_val, std::unordered_set<uint32_t>& out_set) {
+    if (!env_val)
+      return;
+    std::stringstream ss(env_val);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+      if (item.empty())
+        continue;
+      try {
+        uint32_t h = static_cast<uint32_t>(std::stoul(item, nullptr, 0));
+        out_set.insert(h);
+      } catch (...) {}
+    }
+  }
+
+  inline void load_config_file() {
+    const char* home = std::getenv("HOME");
+    if (!home)
+      return;
+
+    std::string config_path = std::string(home) + "/.config/anti_dither/rules.conf";
+    std::ifstream file(config_path);
+    if (!file.is_open())
+      return;
+
+    std::string line;
+    while (std::getline(file, line)) {
+      if (line.empty() || line[0] == '#' || line[0] == ';')
+        continue;
+      auto eq = line.find('=');
+      if (eq == std::string::npos)
+        continue;
+      std::string key = line.substr(0, eq);
+      std::string val = line.substr(eq + 1);
+
+      // Trim whitespace
+      while (!key.empty() && (key.back() == ' ' || key.back() == '\t')) key.pop_back();
+      while (!val.empty() && (val.back() == ' ' || val.back() == '\t' || val.back() == '\r')) val.pop_back();
+      while (!val.empty() && (val.front() == ' ' || val.front() == '\t')) val.erase(0, 1);
+
+      if (key == "exclude_hashes" || key == "blacklist") {
+        parse_hash_list(val.c_str(), g_exclude_hashes);
+      } else if (key == "force_hashes" || key == "whitelist") {
+        parse_hash_list(val.c_str(), g_force_hashes);
+      } else if (key == "dump" || key == "dump_shaders") {
+        g_dump_enabled = (val == "1" || val == "true");
+      } else if (key == "enabled" || key == "anti_dither") {
+        g_enabled = (val == "1" || val == "true");
+      }
+    }
+  }
+
+  inline void init_config() {
+    std::lock_guard<std::mutex> lock(get_logger_mutex());
+    if (g_initialized)
+      return;
+    g_initialized = true;
+
+    g_detected_process = get_process_name();
+    get_clean_process_name();
+
+    const char* env_dither = std::getenv("ANTI_DITHER_ENABLED");
+    if (!env_dither)
+      env_dither = std::getenv("WUWA_ANTI_DITHER");
+
+    if (env_dither) {
+      g_enabled = (std::strcmp(env_dither, "0") != 0);
+    } else {
+      const char* custom_target = std::getenv("ANTI_DITHER_TARGETS");
+      if (!custom_target)
+        custom_target = std::getenv("WUWA_TARGETS");
+
+      if (custom_target && !g_detected_process.empty() && g_detected_process.find(custom_target) != std::string::npos) {
+        g_enabled = true;
+      } else if (
+          // Wuthering Waves (Unreal Engine 4/5)
+          g_detected_process.find("Client-Win64-Shipping") != std::string::npos ||
+          g_detected_process.find("WutheringWaves") != std::string::npos ||
+          g_detected_process.find("Wuthering Waves") != std::string::npos ||
+          g_detected_process.find("Client-Win64") != std::string::npos ||
+          g_detected_process.find("wuwa") != std::string::npos ||
+          // MiHoYo Games (Unity Engine)
+          g_detected_process.find("GenshinImpact") != std::string::npos ||
+          g_detected_process.find("YuanShen") != std::string::npos ||
+          g_detected_process.find("StarRail") != std::string::npos ||
+          g_detected_process.find("ZenlessZoneZero") != std::string::npos ||
+          g_detected_process.find("BH3") != std::string::npos ||
+          g_detected_process.find("Honkai Impact 3") != std::string::npos ||
+          // Other Anime / UE / Unity Games
+          g_detected_process.find("Snowbreak") != std::string::npos ||
+          g_detected_process.find("DuetNightAbyss") != std::string::npos ||
+          g_detected_process.find("NarakaBladepoint") != std::string::npos ||
+          g_detected_process.find("Naraka") != std::string::npos ||
+          g_detected_process.find("InfinityNikki") != std::string::npos ||
+          g_detected_process.find("ProjectMugen") != std::string::npos ||
+          g_detected_process.find("QRSL") != std::string::npos ||
+          g_detected_process.find("TOF") != std::string::npos) {
+        g_enabled = true;
+      } else {
+        g_enabled = false;
+      }
+    }
+
+    const char* env_dump = std::getenv("ANTI_DITHER_DUMP");
+    if (!env_dump)
+      env_dump = std::getenv("WUWA_DUMP_SHADERS");
+    if (env_dump)
+      g_dump_enabled = (std::strcmp(env_dump, "1") == 0 || std::strcmp(env_dump, "true") == 0);
+
+    const char* env_exclude = std::getenv("ANTI_DITHER_EXCLUDE_HASHES");
+    if (env_exclude)
+      parse_hash_list(env_exclude, g_exclude_hashes);
+
+    const char* env_force = std::getenv("ANTI_DITHER_FORCE_HASHES");
+    if (env_force)
+      parse_hash_list(env_force, g_force_hashes);
+
+    load_config_file();
+  }
+
+  inline bool is_active() {
+    init_config();
+    return g_enabled;
+  }
+
+  inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < word_count; ++i) {
+      hash ^= code[i];
+      hash *= 16777619u;
+    }
+    return hash;
+  }
+
+  inline void dump_shader_bundle(const uint32_t* orig_code, size_t orig_words,
+                                 const uint32_t* patched_code, size_t patched_words,
+                                 uint32_t hash, uint32_t dither_nops, uint32_t preserved,
+                                 bool has_frag_coord, bool has_sample) {
+    std::lock_guard<std::mutex> lock(get_logger_mutex());
+    std::string proc = get_clean_process_name();
+    const char* home = std::getenv("HOME");
+
+    std::vector<std::string> base_dirs;
+    base_dirs.push_back("/tmp/game_anti_dither/dumps/" + proc);
+    if (home) {
+      base_dirs.push_back(std::string(home) + "/.local/share/game_anti_dither/dumps/" + proc);
+    }
+
+    for (const auto& dir : base_dirs) {
+      make_dirs(dir);
+      char path_orig[512];
+      char path_patched[512];
+      char path_report[512];
+
+      std::snprintf(path_orig, sizeof(path_orig), "%s/shader_%08x_orig.spv", dir.c_str(), hash);
+      std::snprintf(path_patched, sizeof(path_patched), "%s/shader_%08x_patched.spv", dir.c_str(), hash);
+      std::snprintf(path_report, sizeof(path_report), "%s/shader_%08x_report.txt", dir.c_str(), hash);
+
+      FILE* f_orig = std::fopen(path_orig, "wb");
+      if (f_orig) {
+        std::fwrite(orig_code, sizeof(uint32_t), orig_words, f_orig);
+        std::fclose(f_orig);
+      }
+
+      FILE* f_patched = std::fopen(path_patched, "wb");
+      if (f_patched) {
+        std::fwrite(patched_code, sizeof(uint32_t), patched_words, f_patched);
+        std::fclose(f_patched);
+      }
+
+      FILE* f_rep = std::fopen(path_report, "w");
+      if (f_rep) {
+        std::fprintf(f_rep, "Shader Hash: 0x%08x\n", hash);
+        std::fprintf(f_rep, "Process: %s\n", g_detected_process.c_str());
+        std::fprintf(f_rep, "Words: %zu\n", orig_words);
+        std::fprintf(f_rep, "Dither NOPed: %u\n", dither_nops);
+        std::fprintf(f_rep, "Cutout Preserved: %u\n", preserved);
+        std::fprintf(f_rep, "Has FragCoord: %s\n", has_frag_coord ? "true" : "false");
+        std::fprintf(f_rep, "Has Image Sample: %s\n", has_sample ? "true" : "false");
+        std::fclose(f_rep);
+      }
+    }
+  }
+
+} // namespace game_logger

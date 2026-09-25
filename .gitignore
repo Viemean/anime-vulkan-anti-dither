@@ -1,0 +1,15 @@
+/dist/
+/build/
+vulkan-layer/build/
+vulkan-layer/dist/
+vulkan-layer/subprojects/*
+!vulkan-layer/subprojects/*.wrap
+
+.vscode/
+*.log
+*.tmp
+
+/DOCS_WUWA_ANTI_DITHER.md
+/.agents/
+/upstream/
+
