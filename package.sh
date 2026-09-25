@@ -40,7 +40,9 @@ sed 's|@LIBRARY_PATH@|./libwuwa_antidither_layer.so|g' \
     > "${PORTABLE_DIR}/VkLayer_WUWA_antidither.json"
 cp -f "${VULKAN_DIR}/install.sh" "${PORTABLE_DIR}/"
 cp -f "${VULKAN_DIR}/uninstall.sh" "${PORTABLE_DIR}/"
-cp -f "${ROOT_DIR}/README.md" "${PORTABLE_DIR}/"
+if [[ -f "${ROOT_DIR}/README.md" ]]; then
+    cp -f "${ROOT_DIR}/README.md" "${PORTABLE_DIR}/"
+fi
 chmod +x "${PORTABLE_DIR}/install.sh" "${PORTABLE_DIR}/uninstall.sh"
 
 echo "==> [2/4] 打包通用便携压缩包 (.tar.gz / .tar.zst)..."
@@ -65,7 +67,9 @@ sed 's|@LIBRARY_PATH@|libwuwa_antidither_layer.so|g' \
     "${VULKAN_DIR}/manifest/VkLayer_WUWA_antidither.json.in" \
     > "${DEB_ROOT}/usr/share/vulkan/implicit_layer.d/VkLayer_WUWA_antidither.json"
 
-cp -f "${ROOT_DIR}/README.md" "${DEB_ROOT}/usr/share/doc/vulkan-anti-dither/"
+if [[ -f "${ROOT_DIR}/README.md" ]]; then
+    cp -f "${ROOT_DIR}/README.md" "${DEB_ROOT}/usr/share/doc/vulkan-anti-dither/"
+fi
 
 # 计算已安装大小 (KiB)
 INSTALLED_SIZE=$(du -sk "${DEB_ROOT}" | cut -f1)

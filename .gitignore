@@ -12,4 +12,5 @@ vulkan-layer/subprojects/*
 /DOCS_WUWA_ANTI_DITHER.md
 /upstream/
 /release.sh
+/README.md
 
