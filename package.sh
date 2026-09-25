@@ -78,7 +78,7 @@ Version: ${VERSION}
 Section: graphics
 Priority: optional
 Architecture: amd64
-Maintainer: SpectrumQT <https://github.com/SpectrumQT>
+Maintainer: Viemean <https://github.com/Viemean/anime-vulkan-anti-dither>
 Installed-Size: ${INSTALLED_SIZE}
 Depends: libc6 (>= 2.34), libvulkan1
 Description: Vulkan Anti-Dither Layer for Anime Games
