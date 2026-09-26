@@ -2,7 +2,7 @@ project('wuwa_vulkan_layer', 'cpp',
   version : '1.0.0',
   default_options : [
     'warning_level=2',
-    'cpp_std=c++17',
+    'cpp_std=c++20',
     'b_ndebug=if-release',
     'b_lto=true',
     'buildtype=release'
