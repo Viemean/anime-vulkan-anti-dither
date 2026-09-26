@@ -415,6 +415,56 @@ void test_azur_promilia_pipeline() {
   std::cout << "PASSED\n";
 }
 
+void test_foliage_dither_lod_with_alpha_cutout_preserved() {
+  std::cout << "[Test 9] Foliage Dither LOD Transition with Texture Alpha Cutout (Preserved)... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  // Simulates UE Landscape/Foliage Grass shader (e.g. 0x3bda0183):
+  // Screen FragCoord -> OpUMod % 5 -> Add with Texture Alpha -> Demote
+  std::vector<uint32_t> spv = {
+    wuwa_layer::SPV_HEADER_MAGIC,
+    0x00010300,
+    0,
+    100,
+    0,
+    make_op(4, wuwa_layer::SPV_OP_DECORATE), 10, wuwa_layer::SPV_DECORATION_BUILTIN, wuwa_layer::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, wuwa_layer::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, wuwa_layer::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 20,
+    // 1. Texture Alpha Sample (opcode 87)
+    make_op(5, 87), 4, 15, 2, 3,
+    // 2. FragCoord Load & Modulo (opcode 137)
+    make_op(4, wuwa_layer::SPV_OP_LOAD), 4, 11, 10,
+    make_op(5, 137), 1, 61, 11, 5,
+    // 3. Combine Texture Alpha (15) and Dither Noise (61): OpFAdd (opcode 129)
+    make_op(5, 129), 1, 70, 15, 61,
+    // 4. Comparison
+    make_op(5, 184), 6, 13, 70, 14,
+    make_op(4, wuwa_layer::SPV_OP_BRANCH_CONDITIONAL), 13, 30, 40,
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 30,
+    // Demote must be PRESERVED to maintain grass leaf silhouette!
+    make_op(1, wuwa_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, wuwa_layer::SPV_OP_FUNCTION_END)
+  };
+
+  wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
+  bool found_demote = false;
+  for (uint32_t w : spv) {
+    if ((w & 0xFFFF) == wuwa_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION)
+      found_demote = true;
+  }
+  if (!found_demote) {
+    std::cerr << "FAILED: Foliage texture cutout was wrongly NOPed!\n";
+    std::abort();
+  }
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Vulkan Anti-Dither SSA Unit Tests ===\n";
   test_camera_dither_fragcoord_kill();
@@ -425,6 +475,7 @@ int main() {
   test_dx11_ign_function_call_dither();
   test_dx11_modulo_function_call_dither();
   test_azur_promilia_pipeline();
+  test_foliage_dither_lod_with_alpha_cutout_preserved();
   std::cout << "=== All Anti-Dither Tests Passed Successfully ===\n";
   return 0;
 }

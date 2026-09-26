@@ -28,6 +28,7 @@ namespace wuwa_layer {
   constexpr uint32_t SPV_OP_MEMBER_DECORATE                 = 72;
   constexpr uint32_t SPV_OP_COMPOSITE_CONSTRUCT             = 80;
   constexpr uint32_t SPV_OP_COMPOSITE_EXTRACT               = 81;
+  constexpr uint32_t SPV_OP_COPY_OBJECT                    = 83;
   constexpr uint32_t SPV_OP_DOT                             = 148;
   constexpr uint32_t SPV_OP_LABEL                           = 248;
   constexpr uint32_t SPV_OP_BRANCH                          = 249;
@@ -86,6 +87,25 @@ namespace wuwa_layer {
     }
 
     bool is_force_mode = (game_logger::g_force_hashes.count(shader_hash) > 0);
+
+    // Gate 1: Check if shader contains any discard / demote opcodes.
+    // If a shader does not perform any pixel discard, it is an opaque/unmasked material.
+    // We NEVER modify non-demote shaders (e.g. solid meshes, monstera foliage, lighting), 100% untouched!
+    bool has_any_discard_opcode = false;
+    for (size_t k = 5; k < word_count; ) {
+      uint32_t w = spirv_code[k];
+      uint16_t op = w & 0xFFFF;
+      uint16_t l = (w >> 16) & 0xFFFF;
+      if (l == 0 || (k + l) > word_count) break;
+      if (is_discard_opcode(op)) {
+        has_any_discard_opcode = true;
+        break;
+      }
+      k += l;
+    }
+    if (!has_any_discard_opcode && !is_force_mode) {
+      return;
+    }
 
     std::vector<uint32_t> orig_copy;
     if (game_logger::g_dump_enabled) {
@@ -158,16 +178,14 @@ namespace wuwa_layer {
           if (fu.f >= 347.83f && fu.f <= 347.84f) {
             is_foliage_lod_shader = true;
           }
-          // 3x3 Bayer Table fractions (0/9..8/9)
-          else if ((fu.f >= -0.0001f && fu.f <= 0.0001f) ||
-              (fu.f >= 0.1111f && fu.f <= 0.1112f) ||
-              (fu.f >= 0.2222f && fu.f <= 0.2223f) ||
-              (fu.f >= 0.3333f && fu.f <= 0.3334f) ||
-              (fu.f >= 0.4444f && fu.f <= 0.4445f) ||
-              (fu.f >= 0.5555f && fu.f <= 0.5556f) ||
-              (fu.f >= 0.6666f && fu.f <= 0.6667f) ||
-              (fu.f >= 0.7777f && fu.f <= 0.7778f) ||
-              (fu.f >= 0.8888f && fu.f <= 0.8889f)) {
+          // Strict 3x3 Bayer Table fractions (0/9..8/9, strictly excluding generic 0.0 and 2/3)
+          else if ((fu.f >= 0.1110f && fu.f <= 0.1112f) ||
+                   (fu.f >= 0.2221f && fu.f <= 0.2223f) ||
+                   (fu.f >= 0.3332f && fu.f <= 0.3334f) ||
+                   (fu.f >= 0.4443f && fu.f <= 0.4445f) ||
+                   (fu.f >= 0.5554f && fu.f <= 0.5556f) ||
+                   (fu.f >= 0.7776f && fu.f <= 0.7779f) ||
+                   (fu.f >= 0.8887f && fu.f <= 0.8890f)) {
             if (res_id < bound) {
               is_bayer_fraction[res_id] = 1;
             }
@@ -195,7 +213,7 @@ namespace wuwa_layer {
             }
           }
           // Case 1: DX12 (VKD3D) 1D array of 9 floats
-          if (bayer_fraction_matches >= 6 && length >= 9) {
+          if (bayer_fraction_matches >= 4 && length >= 9) {
             if (res_id < bound) {
               is_dither_const[res_id] = 1;
               has_dither_signature = true;
@@ -408,8 +426,33 @@ namespace wuwa_layer {
 
         // Propagate is_dither_noise & depends_on_sample downstream to res_id
         if (res_id > 0 && res_id < bound) {
-          uint16_t start_op = (opcode >= 19 && opcode <= 54 && opcode != 59) ? 2 : 3;
-          for (uint16_t k = start_op; k < length && (i + k) < word_count; ++k) {
+          uint16_t start_op = 3;
+          uint16_t end_op = length;
+          if (opcode == SPV_OP_EXT_INST) {
+            // SPV_OP_EXT_INST (12): [0]=len|12, [1]=type, [2]=res, [3]=set_id, [4]=inst_literal (not ID!), [5..]=args
+            start_op = 5;
+          } else if (opcode == SPV_OP_COMPOSITE_EXTRACT) {
+            // SPV_OP_COMPOSITE_EXTRACT (81): [0]=len|81, [1]=type, [2]=res, [3]=composite_id, [4..]=index_literals (not IDs!)
+            start_op = 3;
+            end_op = 4;
+          } else if (opcode == 82 /* OpCompositeInsert */) {
+            start_op = 3;
+            end_op = 5; // [3]=object, [4]=composite, [5..]=index_literals
+          } else if (opcode == 79 /* OpVectorShuffle */) {
+            start_op = 3;
+            end_op = 5; // [3]=vec1, [4]=vec2, [5..]=component_literals
+          } else if (opcode == SPV_OP_VARIABLE) {
+            // SPV_OP_VARIABLE (59): [0]=len|59, [1]=type, [2]=res, [3]=storage_class (literal!), [4]=initializer
+            start_op = 4;
+          } else if (opcode == SPV_OP_LOAD) {
+            // SPV_OP_LOAD (61): [0]=len|61, [1]=type, [2]=res, [3]=pointer, [4..]=memory_access (literals)
+            start_op = 3;
+            end_op = 4;
+          } else if (opcode >= 19 && opcode <= 54 && opcode != 59) {
+            start_op = 2;
+          }
+
+          for (uint16_t k = start_op; k < end_op && (i + k) < word_count; ++k) {
             uint32_t op_val = spirv_code[i + k];
             if (op_val < bound) {
               if (is_dither_noise[op_val] && !is_dither_noise[res_id]) {
@@ -443,7 +486,190 @@ namespace wuwa_layer {
     uint32_t current_label = 0;
     uint32_t demote_modified_count = 0;
     uint32_t demote_preserved_count = 0;
+    // Step A: Trace backward slice from Demote conditions only!
+    // CRITICAL: We NEVER touch NMins in color clamps, shadow maps, lighting or SV_Target outputs!
+    // NMins are ONLY uncoupled if they directly participate in computing a demote condition.
+    std::vector<uint8_t> is_in_demote_slice(bound, 0);
+    std::vector<uint8_t> is_const_zero_or_neg(bound, 0);
 
+    // Identify zero or negative constants
+    {
+      size_t k = 5;
+      while (k < word_count) {
+        uint32_t w = spirv_code[k];
+        uint16_t op = w & 0xFFFF;
+        uint16_t l = (w >> 16) & 0xFFFF;
+        if (l == 0 || (k + l) > word_count) break;
+        if (op == SPV_OP_CONSTANT && l >= 4) {
+          uint32_t cid = spirv_code[k + 2];
+          FloatUint fu;
+          fu.u = spirv_code[k + 3];
+          if (cid < bound && fu.f <= 0.0001f) {
+            is_const_zero_or_neg[cid] = 1;
+          }
+        }
+        k += l;
+      }
+    }
+
+    // Seed backward slice from demote function arguments and conditional branch labels
+    {
+      size_t k = 5;
+      while (k < word_count) {
+        uint32_t w = spirv_code[k];
+        uint16_t op = w & 0xFFFF;
+        uint16_t l = (w >> 16) & 0xFFFF;
+        if (l == 0 || (k + l) > word_count) break;
+
+        if (op == SPV_OP_FUNCTION_CALL && l >= 5) {
+          uint32_t fid = spirv_code[k + 3];
+          uint32_t aid = spirv_code[k + 4];
+          if (fid < bound && is_demote_func[fid] && aid < bound) {
+            is_in_demote_slice[aid] = 1;
+          }
+        } else if (is_discard_opcode(op)) {
+          if (current_label < bound) {
+            uint32_t cid = cond_for_label[current_label];
+            if (cid > 0 && cid < bound) is_in_demote_slice[cid] = 1;
+          }
+        }
+        k += l;
+      }
+
+      // Propagate backward slice upstream up to 4 levels
+      for (int step = 0; step < 4; ++step) {
+        k = 5;
+        while (k < word_count) {
+          uint32_t w = spirv_code[k];
+          uint16_t op = w & 0xFFFF;
+          uint16_t l = (w >> 16) & 0xFFFF;
+          if (l == 0 || (k + l) > word_count) break;
+
+          uint32_t res_id = 0;
+          if (l >= 3 && op != SPV_OP_DECORATE && op != SPV_OP_MEMBER_DECORATE &&
+              op != SPV_OP_STORE && op != SPV_OP_BRANCH && op != SPV_OP_BRANCH_CONDITIONAL) {
+            res_id = (op == SPV_OP_VARIABLE && l >= 3) ? spirv_code[k + 2] :
+                     (op >= 19 && op <= 54 && op != 59) ? spirv_code[k + 1] : spirv_code[k + 2];
+          }
+
+          if (res_id > 0 && res_id < bound && is_in_demote_slice[res_id]) {
+            uint16_t start_op = (op == SPV_OP_EXT_INST) ? 5 : 3;
+            for (uint16_t j = start_op; j < l; ++j) {
+              uint32_t operand_id = spirv_code[k + j];
+              if (operand_id < bound) {
+                is_in_demote_slice[operand_id] = 1;
+              }
+            }
+          }
+          k += l;
+        }
+      }
+    }
+
+    // Step A.1: Uncouple ONLY NMins that belong to the demote slice and are NOT clamped to zero
+    uint32_t nmin_uncoupled_count = 0;
+    i = 5;
+    while (i < word_count) {
+      uint32_t word = spirv_code[i];
+      uint16_t opcode = word & 0xFFFF;
+      uint16_t length = (word >> 16) & 0xFFFF;
+      if (length == 0 || (i + length) > word_count) break;
+
+      if (opcode == SPV_OP_EXT_INST && length >= 7) {
+        uint32_t inst = spirv_code[i + 4];
+        // GLSL.std.450 NMin (79) or FMin (28)
+        if (inst == 79 || inst == 28) {
+          uint32_t res_id = spirv_code[i + 2];
+          uint32_t op1 = spirv_code[i + 5];
+          uint32_t op2 = spirv_code[i + 6];
+          if (op1 < bound && op2 < bound && res_id < bound && is_in_demote_slice[res_id]) {
+            bool op1_dither = is_dither_noise[op1];
+            bool op2_dither = is_dither_noise[op2];
+
+            if (op1_dither ^ op2_dither) {
+              uint32_t survivor_op = op1_dither ? op2 : op1;
+              // Ensure survivor is a valid cutout, NOT a zero/negative clamp constant!
+              if (survivor_op < bound && !is_const_zero_or_neg[survivor_op]) {
+                spirv_code[i] = (4 << 16) | SPV_OP_COPY_OBJECT;
+                spirv_code[i + 3] = survivor_op;
+                for (uint16_t k = 4; k < length && (i + k) < word_count; ++k) {
+                  spirv_code[i + k] = (1 << 16) | SPV_OP_NOP;
+                }
+                demote_modified_count++;
+                nmin_uncoupled_count++;
+                is_dither_noise[res_id] = 0;
+              }
+            }
+          }
+        }
+      }
+      i += length;
+    }
+
+    // If NMin was uncoupled, recompute is_dither_noise so downstream demote conditions see pure Cutout!
+    if (nmin_uncoupled_count > 0) {
+      for (size_t k = 0; k < bound; ++k) is_dither_noise[k] = 0;
+      bool dither_data_changed = true;
+      uint32_t dither_iter = 0;
+      while (dither_data_changed && dither_iter < 16) {
+        dither_data_changed = false;
+        dither_iter++;
+        i = 5;
+        while (i < word_count) {
+        uint32_t word = spirv_code[i];
+        uint16_t opcode = word & 0xFFFF;
+        uint16_t length = (word >> 16) & 0xFFFF;
+        if (length == 0 || (i + length) > word_count) break;
+        uint32_t res_id = 0;
+        if (length >= 3 && opcode != SPV_OP_DECORATE && opcode != SPV_OP_MEMBER_DECORATE &&
+            opcode != SPV_OP_STORE && opcode != SPV_OP_BRANCH && opcode != SPV_OP_BRANCH_CONDITIONAL) {
+          res_id = (opcode == SPV_OP_VARIABLE && length >= 3) ? spirv_code[i + 2] :
+                   (opcode >= 19 && opcode <= 54 && opcode != 59) ? spirv_code[i + 1] : spirv_code[i + 2];
+        }
+        if (opcode == SPV_OP_LOAD && length >= 4) {
+          uint32_t ptr_id = spirv_code[i + 3];
+          if (ptr_id < bound && is_dither_const[ptr_id] && res_id < bound && !is_dither_noise[res_id]) {
+            is_dither_noise[res_id] = 1;
+            dither_data_changed = true;
+          }
+        } else if ((opcode == SPV_OP_ACCESS_CHAIN || opcode == 66) && length >= 4) {
+          uint32_t base_ptr = spirv_code[i + 3];
+          if (base_ptr < bound && is_dither_const[base_ptr] && res_id < bound && !is_dither_noise[res_id]) {
+            is_dither_noise[res_id] = 1;
+            dither_data_changed = true;
+          }
+        } else if (opcode == SPV_OP_DOT && length >= 5) {
+          uint32_t op1 = spirv_code[i + 3]; uint32_t op2 = spirv_code[i + 4];
+          if (op1 < bound && op2 < bound && (is_dither_const[op1] || is_dither_const[op2]) && res_id < bound && !is_dither_noise[res_id]) {
+            is_dither_noise[res_id] = 1;
+            dither_data_changed = true;
+          }
+        } else if ((opcode >= 137 && opcode <= 141) && length >= 5) {
+          uint32_t op1 = spirv_code[i + 3];
+          if (op1 < bound && depends_on_frag_coord[op1] && res_id < bound && !is_dither_noise[res_id]) {
+            is_dither_noise[res_id] = 1;
+            dither_data_changed = true;
+          }
+        }
+        if (res_id > 0 && res_id < bound && opcode != SPV_OP_COPY_OBJECT) {
+          uint16_t start_op = (opcode == SPV_OP_EXT_INST) ? 5 : 3;
+          for (uint16_t j = start_op; j < length; ++j) {
+            uint32_t op = spirv_code[i + j];
+            if (op < bound && is_dither_noise[op] && !is_dither_noise[res_id]) {
+              is_dither_noise[res_id] = 1;
+              dither_data_changed = true;
+              break;
+            }
+          }
+        }
+        i += length;
+        }
+      }
+    }
+
+    // Step B: NOP pure dither demotes (Character close-up dither)
+    // CRITICAL: Any condition that depends on texture sample is ALPHA CUTOUT -> NEVER NOP!
+    i = 5;
     while (i < word_count) {
       uint32_t word = spirv_code[i];
       uint16_t opcode = word & 0xFFFF;
@@ -463,8 +689,12 @@ namespace wuwa_layer {
           if (is_force_mode) {
             should_nop = true;
           } else if (arg_id < bound && is_dither_noise[arg_id]) {
-            // Only neutralize character dither noise
-            should_nop = true;
+            // If shader has character dither signature (Bayer 3x3 / IGN), neutralize character close-up dither!
+            // Foliage without Bayer (e.g. grass % 5) has has_dither_signature == false and is preserved 100%.
+            // Foliage with Bayer has already had its Cutout uncoupled in Step A, so its demote condition is preserved.
+            if (has_dither_signature) {
+              should_nop = true;
+            }
           }
 
           if (should_nop) {
@@ -482,7 +712,9 @@ namespace wuwa_layer {
         if (is_force_mode) {
           should_nop = true;
         } else if (cond > 0 && cond < bound && is_dither_noise[cond]) {
-          should_nop = true;
+          if (has_dither_signature) {
+            should_nop = true;
+          }
         }
 
         if (should_nop) {
