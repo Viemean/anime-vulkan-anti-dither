@@ -180,13 +180,16 @@ namespace game_logger {
     g_detected_process = get_process_name();
     get_clean_process_name();
 
+    // 优先读取静态配置文件规则作为基准底配置
+    load_config_file();
+
     const char* env_dither = std::getenv("ANTI_DITHER_ENABLED");
     if (!env_dither)
       env_dither = std::getenv("WUWA_ANTI_DITHER");
 
     if (env_dither) {
       g_enabled = (std::strcmp(env_dither, "0") != 0);
-    } else {
+    } else if (!g_enabled) {
       const char* custom_target = std::getenv("ANTI_DITHER_TARGETS");
       if (!custom_target)
         custom_target = std::getenv("WUWA_TARGETS");
@@ -213,6 +216,11 @@ namespace game_logger {
           g_detected_process.find("azur_promilia") != std::string::npos ||
           g_detected_process.find("AP-Win64") != std::string::npos ||
           g_detected_process.find("Promilia") != std::string::npos ||
+          // Neverness To Everness (HTGame / UE5)
+          g_detected_process.find("HTGame") != std::string::npos ||
+          g_detected_process.find("HT-Win64") != std::string::npos ||
+          g_detected_process.find("NevernessToEverness") != std::string::npos ||
+          g_detected_process.find("HT") != std::string::npos ||
           // Other Anime / UE / Unity Games
           g_detected_process.find("Snowbreak") != std::string::npos ||
           g_detected_process.find("DuetNightAbyss") != std::string::npos ||
@@ -228,6 +236,7 @@ namespace game_logger {
       }
     }
 
+    // 环境变量具备最高覆盖优先级
     const char* env_dump = std::getenv("ANTI_DITHER_DUMP");
     if (!env_dump)
       env_dump = std::getenv("WUWA_DUMP_SHADERS");
@@ -241,13 +250,18 @@ namespace game_logger {
     const char* env_force = std::getenv("ANTI_DITHER_FORCE_HASHES");
     if (env_force)
       parse_hash_list(env_force, g_force_hashes);
-
-    load_config_file();
   }
 
   inline bool is_active() {
     init_config();
     return g_enabled;
+  }
+
+  inline bool is_nte() {
+    init_config();
+    return g_detected_process.find("HTGame") != std::string::npos ||
+           g_detected_process.find("HT-Win64") != std::string::npos ||
+           g_detected_process.find("NevernessToEverness") != std::string::npos;
   }
 
   inline bool is_azur_promilia() {
