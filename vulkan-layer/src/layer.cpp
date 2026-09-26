@@ -1,8 +1,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 
-#include "wuwa_anti_dither.h"
-#include "azur_promilia_anti_dither.h"
+#include "wuwa/wuwa_anti_dither.h"
+#include "azur_promilia/azur_promilia_anti_dither.h"
 
 #include <mutex>
 #include <unordered_map>

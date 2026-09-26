@@ -1,6 +1,6 @@
 #pragma once
 
-#include "logger.h"
+#include "../logger.h"
 #include "wuwa_dxvk.h"
 #include "wuwa_vkd3d.h"
 

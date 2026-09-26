@@ -1,5 +1,5 @@
-#include "../src/wuwa_anti_dither.h"
-#include "../src/azur_promilia_anti_dither.h"
+#include "../src/wuwa/wuwa_anti_dither.h"
+#include "../src/azur_promilia/azur_promilia_anti_dither.h"
 #include <cassert>
 #include <iostream>
 #include <vector>
