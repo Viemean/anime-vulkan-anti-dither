@@ -38,7 +38,7 @@ namespace hsr_layer {
   }
 
   /**
-   * @brief HSR 顶层驱动分发处理函数
+   * @brief 崩坏：星穹铁道着色器分发入口
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     auto stage = detect_shader_stage(spirv_code, word_count);
