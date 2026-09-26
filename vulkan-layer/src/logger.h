@@ -323,6 +323,22 @@ namespace game_logger {
            g_detected_process.find("Genshin") != std::string::npos;
   }
 
+  inline bool is_wuwa() {
+    init_config();
+    return g_detected_process.find("Client-Win64-Shipping") != std::string::npos ||
+           g_detected_process.find("WutheringWaves") != std::string::npos ||
+           g_detected_process.find("Wuthering Waves") != std::string::npos ||
+           g_detected_process.find("Client-Win64") != std::string::npos ||
+           g_detected_process.find("wuwa") != std::string::npos;
+  }
+
+  inline bool is_zzz() {
+    init_config();
+    return g_detected_process.find("ZenlessZoneZero") != std::string::npos ||
+           g_detected_process.find("Zenless Zone Zero") != std::string::npos ||
+           g_detected_process.find("zzz") != std::string::npos;
+  }
+
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {
     uint32_t hash = 2166136261u;
     for (size_t i = 0; i < word_count; ++i) {

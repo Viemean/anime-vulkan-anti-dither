@@ -6,6 +6,7 @@
 #include "nte/nte_anti_dither.h"
 #include "hsr/hsr_anti_dither.h"
 #include "genshin/genshin_anti_dither.h"
+#include "zzz/zzz_anti_dither.h"
 #include "../addon/nte/memory_patcher.h"
 
 #include <mutex>
@@ -30,12 +31,14 @@ namespace {
       genshin_layer::process_spirv_anti_dither(code, word_count);
     } else if (game_logger::is_hsr()) {
       hsr_layer::process_spirv_anti_dither(code, word_count);
+    } else if (game_logger::is_zzz()) {
+      zzz_layer::process_spirv_anti_dither(code, word_count);
+    } else if (game_logger::is_wuwa()) {
+      wuwa_layer::process_spirv_anti_dither(code, word_count);
     } else if (game_logger::is_nte()) {
       nte_layer::process_spirv_anti_dither(code, word_count);
     } else if (game_logger::is_azur_promilia()) {
       azur_promilia_layer::process_spirv_anti_dither(code, word_count);
-    } else {
-      wuwa_layer::process_spirv_anti_dither(code, word_count);
     }
   }
 
