@@ -26,6 +26,7 @@ namespace game_logger {
 
   static bool g_initialized = false;
   static bool g_enabled = false;
+  static int g_config_enabled = -1; // -1: 未在配置中指定, 0: 显式禁用, 1: 显式启用
   static bool g_dump_enabled = false;
   static bool g_log_enabled = false; // 发行版默认静默，零磁盘 I/O 开销
   static std::string g_detected_process;
@@ -179,7 +180,8 @@ namespace game_logger {
       } else if (key == "dump" || key == "dump_shaders") {
         g_dump_enabled = (val == "1" || val == "true");
       } else if (key == "enabled" || key == "anti_dither") {
-        g_enabled = (val == "1" || val == "true");
+        g_config_enabled = (val == "1" || val == "true") ? 1 : 0;
+        g_enabled = (g_config_enabled == 1);
       } else if (key == "log" || key == "logging" || key == "debug" || key == "enable_log") {
         g_log_enabled = (val == "1" || val == "true");
       }
@@ -195,60 +197,66 @@ namespace game_logger {
     g_detected_process = get_process_name();
     get_clean_process_name();
 
-    // 优先读取静态配置文件规则作为基准底配置
-    load_config_file();
+    // 1. 默认状态：依据进程名白名单进行自动检测
+    bool auto_detect_enabled = false;
+    const char* custom_target = std::getenv("ANTI_DITHER_TARGETS");
+    if (!custom_target)
+      custom_target = std::getenv("WUWA_TARGETS");
 
+    if (custom_target && !g_detected_process.empty() && g_detected_process.find(custom_target) != std::string::npos) {
+      auto_detect_enabled = true;
+    } else if (
+        // Wuthering Waves (Unreal Engine 4/5)
+        g_detected_process.find("Client-Win64-Shipping") != std::string::npos ||
+        g_detected_process.find("WutheringWaves") != std::string::npos ||
+        g_detected_process.find("Wuthering Waves") != std::string::npos ||
+        g_detected_process.find("Client-Win64") != std::string::npos ||
+        g_detected_process.find("wuwa") != std::string::npos ||
+        // MiHoYo Games (Unity Engine)
+        g_detected_process.find("GenshinImpact") != std::string::npos ||
+        g_detected_process.find("YuanShen") != std::string::npos ||
+        g_detected_process.find("StarRail") != std::string::npos ||
+        g_detected_process.find("ZenlessZoneZero") != std::string::npos ||
+        g_detected_process.find("BH3") != std::string::npos ||
+        g_detected_process.find("Honkai Impact 3") != std::string::npos ||
+        // Azur Promilia (UE)
+        g_detected_process.find("AzurPromilia") != std::string::npos ||
+        g_detected_process.find("Azur Promilia") != std::string::npos ||
+        g_detected_process.find("azur_promilia") != std::string::npos ||
+        g_detected_process.find("AP-Win64") != std::string::npos ||
+        g_detected_process.find("Promilia") != std::string::npos ||
+        // Neverness To Everness (HTGame / UE5)
+        g_detected_process.find("HTGame") != std::string::npos ||
+        g_detected_process.find("HT-Win64") != std::string::npos ||
+        g_detected_process.find("NevernessToEverness") != std::string::npos ||
+        g_detected_process.find("HT") != std::string::npos ||
+        // Other Anime / UE / Unity Games
+        g_detected_process.find("Snowbreak") != std::string::npos ||
+        g_detected_process.find("DuetNightAbyss") != std::string::npos ||
+        g_detected_process.find("NarakaBladepoint") != std::string::npos ||
+        g_detected_process.find("Naraka") != std::string::npos ||
+        g_detected_process.find("InfinityNikki") != std::string::npos ||
+        g_detected_process.find("ProjectMugen") != std::string::npos ||
+        g_detected_process.find("QRSL") != std::string::npos ||
+        g_detected_process.find("TOF") != std::string::npos) {
+      auto_detect_enabled = true;
+    }
+
+    // 2. 静态配置文件 rules.conf 覆盖默认的进程名检测
+    load_config_file();
+    if (g_config_enabled != -1) {
+      g_enabled = (g_config_enabled == 1);
+    } else {
+      g_enabled = auto_detect_enabled;
+    }
+
+    // 3. 环境变量具备最高覆盖优先级
     const char* env_dither = std::getenv("ANTI_DITHER_ENABLED");
     if (!env_dither)
       env_dither = std::getenv("WUWA_ANTI_DITHER");
 
     if (env_dither) {
-      g_enabled = (std::strcmp(env_dither, "0") != 0);
-    } else if (!g_enabled) {
-      const char* custom_target = std::getenv("ANTI_DITHER_TARGETS");
-      if (!custom_target)
-        custom_target = std::getenv("WUWA_TARGETS");
-
-      if (custom_target && !g_detected_process.empty() && g_detected_process.find(custom_target) != std::string::npos) {
-        g_enabled = true;
-      } else if (
-          // Wuthering Waves (Unreal Engine 4/5)
-          g_detected_process.find("Client-Win64-Shipping") != std::string::npos ||
-          g_detected_process.find("WutheringWaves") != std::string::npos ||
-          g_detected_process.find("Wuthering Waves") != std::string::npos ||
-          g_detected_process.find("Client-Win64") != std::string::npos ||
-          g_detected_process.find("wuwa") != std::string::npos ||
-          // MiHoYo Games (Unity Engine)
-          g_detected_process.find("GenshinImpact") != std::string::npos ||
-          g_detected_process.find("YuanShen") != std::string::npos ||
-          g_detected_process.find("StarRail") != std::string::npos ||
-          g_detected_process.find("ZenlessZoneZero") != std::string::npos ||
-          g_detected_process.find("BH3") != std::string::npos ||
-          g_detected_process.find("Honkai Impact 3") != std::string::npos ||
-          // Azur Promilia (UE)
-          g_detected_process.find("AzurPromilia") != std::string::npos ||
-          g_detected_process.find("Azur Promilia") != std::string::npos ||
-          g_detected_process.find("azur_promilia") != std::string::npos ||
-          g_detected_process.find("AP-Win64") != std::string::npos ||
-          g_detected_process.find("Promilia") != std::string::npos ||
-          // Neverness To Everness (HTGame / UE5)
-          g_detected_process.find("HTGame") != std::string::npos ||
-          g_detected_process.find("HT-Win64") != std::string::npos ||
-          g_detected_process.find("NevernessToEverness") != std::string::npos ||
-          g_detected_process.find("HT") != std::string::npos ||
-          // Other Anime / UE / Unity Games
-          g_detected_process.find("Snowbreak") != std::string::npos ||
-          g_detected_process.find("DuetNightAbyss") != std::string::npos ||
-          g_detected_process.find("NarakaBladepoint") != std::string::npos ||
-          g_detected_process.find("Naraka") != std::string::npos ||
-          g_detected_process.find("InfinityNikki") != std::string::npos ||
-          g_detected_process.find("ProjectMugen") != std::string::npos ||
-          g_detected_process.find("QRSL") != std::string::npos ||
-          g_detected_process.find("TOF") != std::string::npos) {
-        g_enabled = true;
-      } else {
-        g_enabled = false;
-      }
+      g_enabled = (std::strcmp(env_dither, "0") != 0 && std::strcmp(env_dither, "false") != 0);
     }
 
     // 环境变量具备最高覆盖优先级
