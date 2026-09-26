@@ -376,4 +376,50 @@ namespace game_logger {
 #endif
   }
 
+  inline void dump_character_vertex_shader(const uint32_t* vs_code, size_t vs_words,
+                                           uint32_t vs_hash, uint32_t fs_hash) {
+#ifdef DISABLE_LOGGING
+    (void)vs_code; (void)vs_words; (void)vs_hash; (void)fs_hash;
+    return;
+#else
+    init_config();
+    if (!g_dump_enabled)
+      return;
+
+    std::lock_guard<std::mutex> lock(get_logger_mutex());
+    std::string proc = get_clean_process_name();
+    const char* home = std::getenv("HOME");
+
+    std::vector<std::string> base_dirs;
+    base_dirs.push_back("/tmp/game_anti_dither/dumps/" + proc);
+    if (home) {
+      base_dirs.push_back(std::string(home) + "/.local/share/game_anti_dither/dumps/" + proc);
+    }
+
+    for (const auto& dir : base_dirs) {
+      make_dirs(dir);
+      char path_vs[512];
+      char path_report[512];
+
+      std::snprintf(path_vs, sizeof(path_vs), "%s/shader_vs_%08x_fs_%08x.spv", dir.c_str(), vs_hash, fs_hash);
+      std::snprintf(path_report, sizeof(path_report), "%s/shader_vs_%08x_fs_%08x_report.txt", dir.c_str(), vs_hash, fs_hash);
+
+      FILE* f_vs = std::fopen(path_vs, "wb");
+      if (f_vs) {
+        std::fwrite(vs_code, sizeof(uint32_t), vs_words, f_vs);
+        std::fclose(f_vs);
+      }
+
+      FILE* f_rep = std::fopen(path_report, "w");
+      if (f_rep) {
+        std::fprintf(f_rep, "Vertex Shader Hash: 0x%08x\n", vs_hash);
+        std::fprintf(f_rep, "Paired Fragment Shader Hash: 0x%08x\n", fs_hash);
+        std::fprintf(f_rep, "Process: %s\n", g_detected_process.c_str());
+        std::fprintf(f_rep, "Words: %zu\n", vs_words);
+        std::fclose(f_rep);
+      }
+    }
+#endif
+  }
+
 } // namespace game_logger

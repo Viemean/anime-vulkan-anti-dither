@@ -42,12 +42,11 @@ namespace hsr_layer {
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     auto stage = detect_shader_stage(spirv_code, word_count);
-    // HSR 点阵虚化仅发生在像素阶段 (Fragment Shader / Pixel Shader)
-    if (stage != ShaderStage::Fragment) {
-      return;
+    if (stage == ShaderStage::Fragment) {
+      hsr_dxvk::process_spirv_anti_dither(spirv_code, word_count);
+    } else if (stage == ShaderStage::Vertex) {
+      hsr_dxvk::process_vertex_shader(spirv_code, word_count);
     }
-
-    hsr_dxvk::process_spirv_anti_dither(spirv_code, word_count);
   }
 
 } // namespace hsr_layer

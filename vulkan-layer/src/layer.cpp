@@ -107,6 +107,10 @@ namespace {
     return nullptr;
   }
 
+  static std::mutex g_module_spirv_lock;
+  static std::unordered_map<VkShaderModule, std::vector<uint32_t>> g_module_spirv_cache;
+  static std::unordered_map<VkShaderModule, uint32_t> g_module_hash_cache;
+
 } // namespace
 
 // Intercepted Device Functions
@@ -139,8 +143,15 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateShaderModule(
     modified_info.pCode = patched_code.data();
 
     VkResult res = dev_data.create_shader_module(device, &modified_info, pAllocator, pShaderModule);
-    if (res == VK_SUCCESS && orig_hash != new_hash && pShaderModule && *pShaderModule) {
-      game_probe::register_character_shader_module(*pShaderModule);
+    if (res == VK_SUCCESS && pShaderModule && *pShaderModule) {
+      {
+        std::lock_guard<std::mutex> lk(g_module_spirv_lock);
+        g_module_spirv_cache[*pShaderModule] = patched_code;
+        g_module_hash_cache[*pShaderModule] = orig_hash;
+      }
+      if (orig_hash != new_hash) {
+        game_probe::register_character_shader_module(*pShaderModule);
+      }
     }
     return res;
   }
@@ -175,6 +186,9 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
   std::vector<std::vector<VkShaderModuleCreateInfo>> modified_module_infos(createInfoCount);
   std::vector<std::vector<std::vector<uint32_t>>> patched_codes(createInfoCount);
   std::vector<bool> pipeline_is_character(createInfoCount, false);
+  std::vector<bool> pipeline_is_shadow(createInfoCount, false);
+  std::vector<uint32_t> pipeline_vs_hash(createInfoCount, 0);
+  std::vector<uint32_t> pipeline_fs_hash(createInfoCount, 0);
 
   for (uint32_t i = 0; i < createInfoCount; ++i) {
     const auto& orig_info = pCreateInfos[i];
@@ -185,11 +199,25 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
     modified_module_infos[i].resize(orig_info.stageCount);
     patched_codes[i].resize(orig_info.stageCount);
 
+    uint32_t char_fs_hash = 0;
+    bool is_shadow_pipe = false;
+
     for (uint32_t s = 0; s < orig_info.stageCount; ++s) {
       auto& stage = modified_stages[i][s];
 
       if (stage.module && game_probe::is_character_shader_module(stage.module)) {
         pipeline_is_character[i] = true;
+        std::lock_guard<std::mutex> lk(g_module_spirv_lock);
+        auto it = g_module_hash_cache.find(stage.module);
+        if (it != g_module_hash_cache.end()) char_fs_hash = it->second;
+      }
+      if (stage.module) {
+        std::lock_guard<std::mutex> lk(g_module_spirv_lock);
+        auto it = g_module_hash_cache.find(stage.module);
+        if (it != g_module_hash_cache.end() && it->second == 0x492b730c) {
+          is_shadow_pipe = true;
+          pipeline_is_shadow[i] = true;
+        }
       }
 
       const auto* header = static_cast<const VkBaseInStructure*>(stage.pNext);
@@ -207,17 +235,60 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
         patched_codes[i][s].assign(mod_info->pCode, mod_info->pCode + word_count);
 
         uint32_t orig_hash = game_logger::compute_spirv_hash(patched_codes[i][s].data(), patched_codes[i][s].size());
-        if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT || (game_logger::is_nte() && stage.stage == VK_SHADER_STAGE_VERTEX_BIT)) {
+        if (orig_hash == 0x492b730c) {
+          is_shadow_pipe = true;
+          pipeline_is_shadow[i] = true;
+        }
+        if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT ||
+            ((game_logger::is_nte() || game_logger::is_hsr()) && stage.stage == VK_SHADER_STAGE_VERTEX_BIT)) {
           dispatch_anti_dither_process(patched_codes[i][s].data(), patched_codes[i][s].size());
         }
         uint32_t new_hash = game_logger::compute_spirv_hash(patched_codes[i][s].data(), patched_codes[i][s].size());
         if (orig_hash != new_hash) {
           pipeline_is_character[i] = true;
+          char_fs_hash = orig_hash;
         }
 
         modified_module_infos[i][s] = *mod_info;
         modified_module_infos[i][s].pCode = patched_codes[i][s].data();
         stage.pNext = &modified_module_infos[i][s];
+      }
+    }
+
+    if (char_fs_hash != 0) {
+      pipeline_fs_hash[i] = char_fs_hash;
+    }
+
+    if (pipeline_is_character[i] || is_shadow_pipe) {
+      for (uint32_t s = 0; s < orig_info.stageCount; ++s) {
+        auto& stage = modified_stages[i][s];
+        if (stage.stage == VK_SHADER_STAGE_VERTEX_BIT) {
+          const uint32_t* vs_ptr = nullptr;
+          size_t vs_words = 0;
+          uint32_t vs_hash = 0;
+
+          if (!patched_codes[i][s].empty()) {
+            vs_ptr = patched_codes[i][s].data();
+            vs_words = patched_codes[i][s].size();
+            vs_hash = game_logger::compute_spirv_hash(vs_ptr, vs_words);
+          } else if (stage.module) {
+            std::lock_guard<std::mutex> lk(g_module_spirv_lock);
+            auto it = g_module_spirv_cache.find(stage.module);
+            if (it != g_module_spirv_cache.end()) {
+              vs_ptr = it->second.data();
+              vs_words = it->second.size();
+              vs_hash = g_module_hash_cache[stage.module];
+            }
+          }
+
+          if (vs_ptr && vs_words > 0) {
+            pipeline_vs_hash[i] = vs_hash;
+            uint32_t paired_fs = is_shadow_pipe ? 0x492b730c : char_fs_hash;
+            game_logger::dump_character_vertex_shader(vs_ptr, vs_words, vs_hash, paired_fs);
+            game_logger::log_msg("[反虚化驱动层-StarRail] %s管线创建: 绑定 VS: 0x%08x | 对应 FS: 0x%08x | 顶点字长: %zu\n",
+                                 is_shadow_pipe ? "阴影" : "角色", vs_hash, paired_fs, vs_words);
+          }
+        }
       }
     }
 
@@ -227,8 +298,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
   VkResult res = dev_data.create_graphics_pipelines(device, pipelineCache, createInfoCount, modified_infos.data(), pAllocator, pPipelines);
   if (res == VK_SUCCESS && pPipelines) {
     for (uint32_t i = 0; i < createInfoCount; ++i) {
-      if (pipeline_is_character[i] && pPipelines[i]) {
-        game_probe::register_character_pipeline(pPipelines[i]);
+      if (pPipelines[i]) {
+        if (pipeline_is_character[i]) {
+          game_probe::register_pipeline(pPipelines[i], true, false, pipeline_vs_hash[i], pipeline_fs_hash[i]);
+        } else if (pipeline_is_shadow[i]) {
+          game_probe::register_pipeline(pPipelines[i], false, true, pipeline_vs_hash[i], 0x492b730c);
+        }
       }
     }
   }
@@ -341,7 +416,7 @@ static VKAPI_ATTR void VKAPI_CALL wuwa_vkDestroyPipeline(
     auto it = g_device_dispatch.find(get_dispatch_key(device));
     if (it != g_device_dispatch.end()) dev_data = it->second;
   }
-  game_probe::unregister_character_pipeline(pipeline);
+  game_probe::unregister_pipeline(pipeline);
   if (dev_data.destroy_pipeline) {
     dev_data.destroy_pipeline(device, pipeline, pAllocator);
   }
@@ -365,7 +440,7 @@ static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDraw(
     uint32_t                                    firstVertex,
     uint32_t                                    firstInstance) {
   DeviceData dev_data = get_dev_data_for_cmd(commandBuffer);
-  game_probe::on_draw(commandBuffer);
+  game_probe::on_draw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
   if (dev_data.cmd_draw) {
     dev_data.cmd_draw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
   }
@@ -379,7 +454,7 @@ static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDrawIndexed(
     int32_t                                     vertexOffset,
     uint32_t                                    firstInstance) {
   DeviceData dev_data = get_dev_data_for_cmd(commandBuffer);
-  game_probe::on_draw(commandBuffer);
+  game_probe::on_draw_indexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
   if (dev_data.cmd_draw_indexed) {
     dev_data.cmd_draw_indexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
   }

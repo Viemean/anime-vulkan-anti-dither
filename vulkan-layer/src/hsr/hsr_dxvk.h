@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <unordered_map>
 
 namespace hsr_dxvk {
 
@@ -210,6 +211,106 @@ namespace hsr_dxvk {
                                         shader_hash, dither_nops, preserved,
                                         has_frag_coord, false);
       }
+    }
+  }
+
+  inline void process_vertex_shader(uint32_t* spirv_code, size_t word_count) {
+    if (!spirv_code || word_count < 5)
+      return;
+
+    if (!game_logger::is_active())
+      return;
+
+    if (spirv_code[0] != SPV_HEADER_MAGIC)
+      return;
+
+    uint32_t bound = spirv_code[3];
+    if (bound == 0 || bound > 1048576)
+      return;
+
+    std::vector<uint32_t> n99_ids;
+    size_t i = 5;
+    while (i < word_count) {
+      uint32_t word = spirv_code[i];
+      uint16_t opcode = word & 0xFFFF;
+      uint16_t length = (word >> 16) & 0xFFFF;
+      if (length == 0 || (i + length) > word_count)
+        break;
+
+      if (opcode == 43 /* OpConstant */ && length >= 4) {
+        if (spirv_code[i + 3] == 0xC2C60000 /* -99.0f */) {
+          n99_ids.push_back(spirv_code[i + 2]);
+        }
+      }
+      i += length;
+    }
+
+    if (n99_ids.empty())
+      return;
+
+    // 记录触发 -99.0f 坍缩的条件 ID 及其坍缩侧 (1: true 分支坍缩, 2: false 分支坍缩)
+    std::unordered_map<uint32_t, int> cond_collapse_side;
+    i = 5;
+    while (i < word_count) {
+      uint32_t word = spirv_code[i];
+      uint16_t opcode = word & 0xFFFF;
+      uint16_t length = (word >> 16) & 0xFFFF;
+      if (length == 0 || (i + length) > word_count)
+        break;
+
+      if (opcode == 169 /* OpSelect */ && length == 6) {
+        uint32_t cond = spirv_code[i + 3];
+        uint32_t true_val = spirv_code[i + 4];
+        uint32_t false_val = spirv_code[i + 5];
+
+        for (uint32_t n99_id : n99_ids) {
+          if (true_val == n99_id) {
+            cond_collapse_side[cond] = 1; // true 分支为坍缩值
+            break;
+          } else if (false_val == n99_id) {
+            cond_collapse_side[cond] = 2; // false 分支为坍缩值
+            break;
+          }
+        }
+      }
+      i += length;
+    }
+
+    if (cond_collapse_side.empty())
+      return;
+
+    uint32_t shader_hash = game_logger::compute_spirv_hash(spirv_code, word_count);
+    uint32_t patched_selects = 0;
+
+    i = 5;
+    while (i < word_count) {
+      uint32_t word = spirv_code[i];
+      uint16_t opcode = word & 0xFFFF;
+      uint16_t length = (word >> 16) & 0xFFFF;
+      if (length == 0 || (i + length) > word_count)
+        break;
+
+      if (opcode == 169 /* OpSelect */ && length == 6) {
+        uint32_t cond = spirv_code[i + 3];
+        auto it = cond_collapse_side.find(cond);
+        if (it != cond_collapse_side.end()) {
+          if (it->second == 1) {
+            // true 分支坍缩 -> 替换为正常值 false_val
+            spirv_code[i + 4] = spirv_code[i + 5];
+            patched_selects++;
+          } else if (it->second == 2) {
+            // false 分支坍缩 -> 替换为正常值 true_val
+            spirv_code[i + 5] = spirv_code[i + 4];
+            patched_selects++;
+          }
+        }
+      }
+      i += length;
+    }
+
+    if (patched_selects > 0) {
+      game_logger::log_msg("[反虚化驱动层-HSR-DXVK] 顶点着色器: 0x%08x | 字长: %zu | 消除几何坍缩: %u 处\n",
+                           shader_hash, word_count, patched_selects);
     }
   }
 

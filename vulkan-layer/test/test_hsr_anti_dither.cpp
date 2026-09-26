@@ -265,6 +265,105 @@ void test_hsr_flower_shader_cutout_preserved() {
   std::cout << "PASSED (1 Bayer NOPed, 4 Petal Cutouts Preserved)\n";
 }
 
+// 用例 6: 顶点着色器 -99.0f 几何坍缩中和（双向条件与关联 W 属性分支自适应修正）
+void test_hsr_vertex_shader_collapse_neutralized() {
+  std::cout << "[Test HSR 6] Vertex Shader -99.0f Geometry Collapse Neutralized... ";
+
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+
+  std::vector<uint32_t> spv = {
+    hsr_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    0,
+    100, // bound
+    0,
+    // OpConstant %10 (-99.0f)
+    make_op(4, 43 /* OpConstant */), 1, 10, 0xC2C60000,
+    // OpConstant %11 (1.0f)
+    make_op(4, 43 /* OpConstant */), 1, 11, 0x3F800000,
+    // OpFunction
+    make_op(5, 54 /* OpFunction */), 2, 1, 0, 3,
+    make_op(2, 248 /* OpLabel */), 20,
+    // OpSelect %30 (cond=%50, true=%21, false=%10[-99]) -> 坍缩侧是 false
+    make_op(6, 169 /* OpSelect */), 1, 30, 50, 21, 10,
+    // OpSelect %31 (cond=%50, true=%22, false=%11[1.0]) -> 同条件 W 分量，应同样修正
+    make_op(6, 169 /* OpSelect */), 1, 31, 50, 22, 11,
+    make_op(1, 253 /* OpReturn */),
+    make_op(1, 56 /* OpFunctionEnd */)
+  };
+
+  hsr_dxvk::process_vertex_shader(spv.data(), spv.size());
+
+  // 验证 %30 的 false_val 是否被替换为 true_val (%21)
+  assert(spv[15] == 21); // %30 false_val
+  // 验证 %31 的 false_val 是否被替换为 true_val (%22)
+  assert(spv[21] == 22); // %31 false_val
+
+  std::cout << "PASSED\n";
+}
+
+// 用例 7: 实机抓取黑塔真实顶点着色器 (shader_vs_f5f22a59_fs_69e2c521) 坍缩消除端到端验证
+void test_hsr_real_vertex_shader_dump_neutralized() {
+  std::cout << "[Test HSR 7] Real Dumped Vertex Shader (shader_vs_f5f22a59) Collapses Neutralized... ";
+
+  const char* dump_path = "/tmp/game_anti_dither/dumps/StarRail/shader_vs_f5f22a59_fs_69e2c521.spv";
+  FILE* fp = fopen(dump_path, "rb");
+  if (!fp) {
+    std::cout << "SKIPPED (no dump file)\n";
+    return;
+  }
+
+  fseek(fp, 0, SEEK_END);
+  long fsize = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+
+  if (fsize < 20 || (fsize % 4) != 0) {
+    fclose(fp);
+    std::cout << "SKIPPED (invalid dump size)\n";
+    return;
+  }
+
+  std::vector<uint32_t> spv(fsize / 4);
+  if (fread(spv.data(), 1, fsize, fp) != static_cast<size_t>(fsize)) {
+    fclose(fp);
+    std::cout << "SKIPPED (read error)\n";
+    return;
+  }
+  fclose(fp);
+
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+
+  hsr_dxvk::process_vertex_shader(spv.data(), spv.size());
+
+  // 验证原本的 -99.0f 是否不再出现在任何 OpSelect 的输出选择中
+  bool found_n99_in_select = false;
+  size_t i = 5;
+  while (i < spv.size()) {
+    uint32_t word = spv[i];
+    uint16_t opcode = word & 0xFFFF;
+    uint16_t length = (word >> 16) & 0xFFFF;
+    if (length == 0 || (i + length) > spv.size()) break;
+
+    if (opcode == 169 && length == 6) {
+      // 检查被引用的操作数是否还有 -99.0f 常量 ID (ID 为 86)
+      if (spv[i + 4] == 86 || spv[i + 5] == 86) {
+        found_n99_in_select = true;
+        break;
+      }
+    }
+    i += length;
+  }
+
+  if (found_n99_in_select) {
+    std::cerr << "FAILED: -99.0f still active in OpSelect branch!\n";
+    std::abort();
+  }
+
+  std::cout << "PASSED (4 Collapses Successfully Neutralized)\n";
+}
+
 int main() {
   std::cout << "=== HSR (Honkai: Star Rail) DXVK Anti-Dither Unit Tests ===\n";
   test_hsr_pipeline_stage_dispatch();
@@ -272,6 +371,8 @@ int main() {
   test_hsr_alpha_cutout_preserved();
   test_hsr_real_shader_dump_neutralized();
   test_hsr_flower_shader_cutout_preserved();
+  test_hsr_vertex_shader_collapse_neutralized();
+  test_hsr_real_vertex_shader_dump_neutralized();
   std::cout << "=== All HSR Tests Passed Successfully ===\n";
   return 0;
 }
