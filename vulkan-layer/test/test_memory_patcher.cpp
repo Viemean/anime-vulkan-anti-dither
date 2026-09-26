@@ -88,11 +88,52 @@ void test_safe_memory_patching() {
   std::cout << "PASSED\n";
 }
 
+void test_rva_validation_and_fallback() {
+  std::cout << "[Test 4] RVA expected byte validation & AOB fallback simulation... ";
+  std::vector<uint8_t> fake_code = {
+    // 0x00: 伪造的漂移代码 (不是预期字节)
+    0x90, 0x90, 0x90, 0x90,
+    // 0x04: 实际目标函数漂移到了这里
+    0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0xC3
+  };
+
+  uintptr_t base = reinterpret_cast<uintptr_t>(fake_code.data());
+  uintptr_t wrong_rva = 0; // 错误 RVA (模拟版本漂移)
+  std::vector<uint8_t> expected = { 0x48, 0x89, 0x5C, 0x24, 0x08 };
+
+  // 1. 模拟静态校验失败
+  const uint8_t* ptr_wrong = reinterpret_cast<const uint8_t*>(base + wrong_rva);
+  bool matched = true;
+  for (size_t i = 0; i < expected.size(); ++i) {
+    if (ptr_wrong[i] != expected[i]) {
+      matched = false;
+      break;
+    }
+  }
+  (void)matched;
+  assert(!matched); // 预期静态校验失败
+
+  // 2. 模拟触发 AOB 特征码兜底搜索
+  nte_mem::SignaturePattern fallback_pat("48 89 5C 24 08 48 89 6C");
+  uintptr_t fallback_addr = nte_mem::scan_memory(base, fake_code.size(), fallback_pat);
+  (void)fallback_addr;
+  assert(fallback_addr == base + 4); // 成功定位到漂移后的新地址
+
+  // 3. 模拟熔断：特征码完全不存在时必须拒绝
+  nte_mem::SignaturePattern invalid_pat("DE AD BE EF");
+  uintptr_t no_addr = nte_mem::scan_memory(base, fake_code.size(), invalid_pat);
+  (void)no_addr;
+  assert(no_addr == 0); // 熔断保护
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "Running memory_patcher unit tests...\n";
   test_maps_parsing();
   test_pattern_matching();
   test_safe_memory_patching();
+  test_rva_validation_and_fallback();
   std::cout << "All memory_patcher unit tests PASSED.\n";
   return 0;
 }

@@ -292,6 +292,7 @@ namespace nte_mem {
       uintptr_t rva;
       std::vector<uint8_t> patch_bytes;
       std::vector<uint8_t> expected_orig_bytes;
+      std::string pattern_fallback;
     };
 
     static const MemoryPatchEntry targets[] = {
@@ -300,35 +301,40 @@ namespace nte_mem {
         "CameraDistanceFadeAlpha::Compute",
         0x07BB8BA0,
         { 0xB8, 0x00, 0x00, 0x80, 0x3F, 0x66, 0x0F, 0x6E, 0xC0, 0xC3 },
-        { 0x48, 0x89, 0x5C, 0x24, 0x08 }
+        { 0x48, 0x89, 0x5C, 0x24, 0x08 },
+        "48 89 5C 24 08 48 89 6C"
       },
       // 2. 相机透明度隐藏判断门禁：将 ja (77 1A) 改为 jmp (EB 1A)，无条件跳过隐藏函数调用
       {
         "CameraOcclusion::BranchGateSkipHide",
         0x07BC010C,
         { 0xEB, 0x1A },
-        { 0x77, 0x1A }
+        { 0x77, 0x1A },
+        "77 1A 4C 8B C7 48 8B CB"
       },
       // 3. 角色隐藏核心执行函数：入口置为 RET (C3)，彻底阻止将角色 HiddenInGame 设为 true
       {
         "CameraOcclusion::ExecuteHideCharacter",
         0x07BDB5A0,
         { 0xC3 },
-        { 0x4D, 0x85, 0xC0 }
+        { 0x4D, 0x85, 0xC0 },
+        "4D 85 C0 0F 84 81 00 00"
       },
       // 4. 角色网格隐藏函数原生实现：入口置为 RET (C3)
       {
         "AHTCharacter::HideCharacterMesh",
         0x06EA52B0,
         { 0xC3 },
-        { 0x48, 0x83, 0xEC, 0x28 }
+        { 0x48, 0x83, 0xEC, 0x28 },
+        "48 83 EC 28 48 8B 05 ?? ?? ?? ??"
       },
       // 5. 角色网格隐藏函数蓝图封装：入口置为 RET (C3)
       {
         "execHideCharacterMesh",
         0x06EA55A0,
         { 0xC3 },
-        { 0x48, 0x83, 0xEC, 0x28 }
+        { 0x48, 0x83, 0xEC, 0x28 },
+        "48 83 EC 28 B9 10 00 00"
       }
     };
 
@@ -336,23 +342,64 @@ namespace nte_mem {
 
     for (const auto& tgt : targets) {
       uintptr_t target_addr = module_base + tgt.rva;
-      if (target_addr < code_start || target_addr + tgt.patch_bytes.size() > code_end) {
-        game_logger::log_msg("[NTE-Addon] 目标补丁 %s 地址 0x%lx 超出代码段 (0x%lx - 0x%lx)\n",
-                             tgt.name, target_addr, code_start, code_end);
-        all_patched = false;
-        continue;
-      }
+      bool target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
 
-      // 检查是否已经打过该补丁
-      bool already_patched = true;
-      const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
-      for (size_t i = 0; i < tgt.patch_bytes.size(); ++i) {
-        if (cur_ptr[i] != tgt.patch_bytes[i]) {
-          already_patched = false;
-          break;
+      // 检查是否已经打过该补丁 (幂等性保护)
+      if (target_valid) {
+        bool already_patched = true;
+        const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
+        for (size_t i = 0; i < tgt.patch_bytes.size(); ++i) {
+          if (cur_ptr[i] != tgt.patch_bytes[i]) {
+            already_patched = false;
+            break;
+          }
+        }
+        if (already_patched) {
+          continue;
         }
       }
-      if (already_patched) {
+
+      // 前置一致性检查：校验静态 RVA 处的预期机器码是否匹配
+      bool rva_matched = false;
+      if (target_valid) {
+        rva_matched = true;
+        const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
+        for (size_t i = 0; i < tgt.expected_orig_bytes.size(); ++i) {
+          if (cur_ptr[i] != tgt.expected_orig_bytes[i]) {
+            rva_matched = false;
+            break;
+          }
+        }
+      }
+
+      // 若静态 RVA 不匹配预期机器码，触发动态特征码扫描兜底 (跨版本自适应)
+      if (!rva_matched) {
+        game_logger::log_msg("[NTE-Addon] 目标 %s 静态 RVA (0x%lx) 预期机器码不匹配，触发动态特征码扫描兜底...\n",
+                             tgt.name, tgt.rva);
+        if (!tgt.pattern_fallback.empty()) {
+          uintptr_t matched_addr = scan_module_pattern(module_path, tgt.pattern_fallback, true);
+          if (matched_addr != 0) {
+            uintptr_t new_rva = matched_addr - module_base;
+            game_logger::log_msg("[NTE-Addon] 动态特征码扫描成功定位 %s: 新地址 0x%lx (新 RVA: 0x%lx)\n",
+                                 tgt.name, matched_addr, new_rva);
+            target_addr = matched_addr;
+            target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
+          } else {
+            game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 动态特征码未命中，触发熔断保护，拒绝写入\n", tgt.name);
+            all_patched = false;
+            continue;
+          }
+        } else {
+          game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 缺少特征码兜底，触发熔断保护，拒绝写入\n", tgt.name);
+          all_patched = false;
+          continue;
+        }
+      }
+
+      if (!target_valid) {
+        game_logger::log_msg("[NTE-Addon] 目标补丁 %s 最终地址 0x%lx 超出代码段 (0x%lx - 0x%lx)\n",
+                             tgt.name, target_addr, code_start, code_end);
+        all_patched = false;
         continue;
       }
 
