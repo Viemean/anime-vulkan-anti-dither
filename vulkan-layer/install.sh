@@ -6,12 +6,18 @@ DIST_LIB="${SCRIPT_DIR}/dist/libwuwa_antidither_layer.so"
 BUILD_LIB="${SCRIPT_DIR}/build/libwuwa_antidither_layer.so"
 
 LIB_SRC=""
-if [[ -f "${SCRIPT_DIR}/libwuwa_antidither_layer.so" ]]; then
-    LIB_SRC="${SCRIPT_DIR}/libwuwa_antidither_layer.so"
-elif [[ -f "${DIST_LIB}" ]]; then
-    LIB_SRC="${DIST_LIB}"
+if [[ -f "${BUILD_LIB}" && -f "${DIST_LIB}" ]]; then
+    if [[ "${BUILD_LIB}" -nt "${DIST_LIB}" ]]; then
+        LIB_SRC="${BUILD_LIB}"
+    else
+        LIB_SRC="${DIST_LIB}"
+    fi
 elif [[ -f "${BUILD_LIB}" ]]; then
     LIB_SRC="${BUILD_LIB}"
+elif [[ -f "${DIST_LIB}" ]]; then
+    LIB_SRC="${DIST_LIB}"
+elif [[ -f "${SCRIPT_DIR}/libwuwa_antidither_layer.so" ]]; then
+    LIB_SRC="${SCRIPT_DIR}/libwuwa_antidither_layer.so"
 else
     echo "==> 未找到已编译库，正在自动触发编译..."
     "${SCRIPT_DIR}/build.sh"
