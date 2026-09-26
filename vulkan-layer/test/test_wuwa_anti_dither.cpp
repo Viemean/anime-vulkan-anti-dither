@@ -560,6 +560,67 @@ void test_dx11_real_world_shaders() {
   std::cout << "PASSED\n";
 }
 
+void test_logger_rotation_and_retention() {
+  std::cout << "[Test 11] Logger and Dump 3-Run Rotation Retention... ";
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  std::string test_log_base = "/tmp/test_anti_dither_rotation.log";
+  std::string test_dump_base = "/tmp/test_anti_dither_dump_rotation";
+
+  // 清理测试环境
+  for (int i = 0; i <= 5; ++i) {
+    fs::remove(test_log_base + (i == 0 ? "" : "." + std::to_string(i)), ec);
+    fs::remove_all(test_dump_base + (i == 0 ? "" : "." + std::to_string(i)), ec);
+  }
+
+  // 模拟5次运行生成与轮转
+  for (int run = 1; run <= 5; ++run) {
+    game_logger::rotate_file_backups(test_log_base, 3);
+    std::ofstream lf(test_log_base);
+    lf << "run " << run << "\n";
+    lf.close();
+
+    game_logger::rotate_directory_backups(test_dump_base, 3);
+    fs::create_directories(test_dump_base, ec);
+    std::ofstream df(test_dump_base + "/run.txt");
+    df << "dump run " << run << "\n";
+    df.close();
+  }
+
+  // 验证只保留当前 + 3次历史备份 (.1, .2, .3)
+  if (!fs::exists(test_log_base, ec) ||
+      !fs::exists(test_log_base + ".1", ec) ||
+      !fs::exists(test_log_base + ".2", ec) ||
+      !fs::exists(test_log_base + ".3", ec)) {
+    std::cerr << "FAILED: Log retention missing required .1, .2 or .3 backups!\n";
+    std::abort();
+  }
+  if (fs::exists(test_log_base + ".4", ec) || fs::exists(test_log_base + ".5", ec)) {
+    std::cerr << "FAILED: Log retention did not prune .4 or .5 backups!\n";
+    std::abort();
+  }
+
+  if (!fs::exists(test_dump_base, ec) ||
+      !fs::exists(test_dump_base + ".1", ec) ||
+      !fs::exists(test_dump_base + ".2", ec) ||
+      !fs::exists(test_dump_base + ".3", ec)) {
+    std::cerr << "FAILED: Dump directory retention missing required backups!\n";
+    std::abort();
+  }
+  if (fs::exists(test_dump_base + ".4", ec) || fs::exists(test_dump_base + ".5", ec)) {
+    std::cerr << "FAILED: Dump directory retention did not prune older backups!\n";
+    std::abort();
+  }
+
+  // 清理临时测试文件
+  for (int i = 0; i <= 3; ++i) {
+    fs::remove(test_log_base + (i == 0 ? "" : "." + std::to_string(i)), ec);
+    fs::remove_all(test_dump_base + (i == 0 ? "" : "." + std::to_string(i)), ec);
+  }
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Vulkan Anti-Dither SSA Unit Tests ===\n";
   test_camera_dither_fragcoord_kill();
@@ -572,6 +633,7 @@ int main() {
   test_azur_promilia_pipeline();
   test_foliage_dither_lod_with_alpha_cutout_preserved();
   test_dx11_real_world_shaders();
+  test_logger_rotation_and_retention();
   std::cout << "=== All Anti-Dither Tests Passed Successfully ===\n";
   return 0;
 }

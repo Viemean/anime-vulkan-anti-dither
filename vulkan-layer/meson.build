@@ -27,13 +27,13 @@ wuwa_layer_lib = shared_library('wuwa_antidither_layer',
   install : true
 )
 
-anti_dither_test = executable('anti_dither_test',
-  'test/test_anti_dither.cpp',
+wuwa_anti_dither_test = executable('wuwa_anti_dither_test',
+  'test/test_wuwa_anti_dither.cpp',
   dependencies : [vulkan_headers_dep],
   cpp_args : ['-O2']
 )
 
-test('anti_dither_test', anti_dither_test)
+test('wuwa_anti_dither_test', wuwa_anti_dither_test)
 
 nte_anti_dither_test = executable('nte_anti_dither_test',
   'test/test_nte_anti_dither.cpp',

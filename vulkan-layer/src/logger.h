@@ -12,7 +12,7 @@
 #include <unordered_set>
 #include <fstream>
 #include <sstream>
-#include <sys/stat.h>
+#include <filesystem>
 #include <unistd.h>
 #include <mutex>
 #include <string_view>
@@ -24,30 +24,34 @@ namespace game_logger {
     return s_mutex;
   }
 
-  static bool g_initialized = false;
-  static bool g_enabled = false;
-  static int g_config_enabled = -1; // -1: 未在配置中指定, 0: 显式禁用, 1: 显式启用
-  static bool g_dump_enabled = false;
-  static bool g_log_enabled = false; // 发行版默认静默，零磁盘 I/O 开销
-  static std::string g_detected_process;
-  static std::string g_clean_process_name;
-  static std::unordered_set<uint32_t> g_exclude_hashes;
-  static std::unordered_set<uint32_t> g_force_hashes;
+  inline bool g_initialized = false;
+  inline bool g_enabled = false;
+  inline int g_config_enabled = -1; // -1: 未在配置中指定, 0: 显式禁用, 1: 显式启用
+  inline bool g_dump_enabled = false;
+  inline bool g_log_enabled = false; // 发行版默认静默，零磁盘 I/O 开销
+  inline std::string g_detected_process;
+  inline std::string g_clean_process_name;
+  inline std::unordered_set<uint32_t> g_exclude_hashes;
+  inline std::unordered_set<uint32_t> g_force_hashes;
+
+  inline FILE* g_log_file = nullptr;
+  inline bool g_log_file_initialized = false;
+
+  inline bool g_dump_dir_initialized = false;
+  inline std::string g_dump_dir_path;
+
+  struct LogFileGuard {
+    ~LogFileGuard() {
+      if (g_log_file) {
+        std::fclose(g_log_file);
+        g_log_file = nullptr;
+      }
+    }
+  };
+  inline LogFileGuard s_log_guard;
 
   inline void init_config();
   inline bool is_log_enabled();
-
-  inline void make_dirs(const std::string& path) {
-    std::string current;
-    for (size_t i = 0; i < path.length(); ++i) {
-      current += path[i];
-      if (path[i] == '/' || i == path.length() - 1) {
-        if (!current.empty() && current != "/") {
-          mkdir(current.c_str(), 0777);
-        }
-      }
-    }
-  }
 
   inline std::string get_process_name() {
     std::ifstream cmdline("/proc/self/cmdline");
@@ -80,6 +84,73 @@ namespace game_logger {
     return g_clean_process_name;
   }
 
+  inline void rotate_file_backups(const std::string& base_path, int max_backups = 3) {
+    std::error_code ec;
+    std::string oldest = base_path + "." + std::to_string(max_backups);
+    std::filesystem::remove(oldest, ec);
+
+    for (int i = max_backups - 1; i >= 1; --i) {
+      std::string from = base_path + "." + std::to_string(i);
+      std::string to = base_path + "." + std::to_string(i + 1);
+      if (std::filesystem::exists(from, ec)) {
+        std::filesystem::rename(from, to, ec);
+      }
+    }
+
+    if (std::filesystem::exists(base_path, ec)) {
+      std::filesystem::rename(base_path, base_path + ".1", ec);
+    }
+  }
+
+  inline void rotate_directory_backups(const std::string& base_dir, int max_backups = 3) {
+    std::error_code ec;
+    std::string oldest = base_dir + "." + std::to_string(max_backups);
+    std::filesystem::remove_all(oldest, ec);
+
+    for (int i = max_backups - 1; i >= 1; --i) {
+      std::string from = base_dir + "." + std::to_string(i);
+      std::string to = base_dir + "." + std::to_string(i + 1);
+      if (std::filesystem::exists(from, ec)) {
+        std::filesystem::rename(from, to, ec);
+      }
+    }
+
+    if (std::filesystem::exists(base_dir, ec)) {
+      std::filesystem::rename(base_dir, base_dir + ".1", ec);
+    }
+  }
+
+  inline void ensure_log_file_open() {
+    if (g_log_file_initialized)
+      return;
+    g_log_file_initialized = true;
+
+    std::string proc = get_clean_process_name();
+    std::string log_dir = "/tmp/game_anti_dither/logs";
+    std::error_code ec;
+    std::filesystem::create_directories(log_dir, ec);
+
+    std::string base_log = log_dir + "/" + proc + ".log";
+    rotate_file_backups(base_log, 3);
+
+    g_log_file = std::fopen(base_log.c_str(), "w");
+  }
+
+  inline const std::string& ensure_dump_dir_ready() {
+    if (g_dump_dir_initialized)
+      return g_dump_dir_path;
+    g_dump_dir_initialized = true;
+
+    std::string proc = get_clean_process_name();
+    g_dump_dir_path = "/tmp/game_anti_dither/dumps/" + proc;
+
+    rotate_directory_backups(g_dump_dir_path, 3);
+    std::error_code ec;
+    std::filesystem::create_directories(g_dump_dir_path, ec);
+
+    return g_dump_dir_path;
+  }
+
   inline void log_msg(const char* fmt, ...) {
 #ifdef DISABLE_LOGGING
     (void)fmt;
@@ -90,46 +161,21 @@ namespace game_logger {
     }
 
     std::lock_guard<std::mutex> lock(get_logger_mutex());
-    va_list args;
-    std::string proc = get_clean_process_name();
-    const char* home = std::getenv("HOME");
-
-    std::string tmp_dir = "/tmp/game_anti_dither/logs";
-    make_dirs(tmp_dir);
-    std::string tmp_log = tmp_dir + "/" + proc + ".log";
-    std::string tmp_latest = tmp_dir + "/latest.log";
-
-    std::string home_log, home_latest;
-    if (home) {
-      std::string home_dir = std::string(home) + "/.local/share/game_anti_dither/logs";
-      make_dirs(home_dir);
-      home_log = home_dir + "/" + proc + ".log";
-      home_latest = home_dir + "/latest.log";
+    ensure_log_file_open();
+    if (!g_log_file) {
+      return;
     }
 
     char time_buf[64];
     std::time_t t = std::time(nullptr);
     std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", std::localtime(&t));
 
-    FILE* files[4] = {
-      std::fopen(tmp_log.c_str(), "a"),
-      std::fopen(tmp_latest.c_str(), "a"),
-      home_log.empty() ? nullptr : std::fopen(home_log.c_str(), "a"),
-      home_latest.empty() ? nullptr : std::fopen(home_latest.c_str(), "a")
-    };
-
+    std::fprintf(g_log_file, "[%s] ", time_buf);
+    va_list args;
     va_start(args, fmt);
-    for (int idx = 0; idx < 4; ++idx) {
-      if (files[idx]) {
-        std::fprintf(files[idx], "[%s] ", time_buf);
-        va_list a;
-        va_copy(a, args);
-        std::vfprintf(files[idx], fmt, a);
-        va_end(a);
-        std::fclose(files[idx]);
-      }
-    }
+    std::vfprintf(g_log_file, fmt, args);
     va_end(args);
+    std::fflush(g_log_file);
 #endif
   }
 
@@ -362,48 +408,38 @@ namespace game_logger {
       return;
 
     std::lock_guard<std::mutex> lock(get_logger_mutex());
-    std::string proc = get_clean_process_name();
-    const char* home = std::getenv("HOME");
+    const std::string& dir = ensure_dump_dir_ready();
 
-    std::vector<std::string> base_dirs;
-    base_dirs.push_back("/tmp/game_anti_dither/dumps/" + proc);
-    if (home) {
-      base_dirs.push_back(std::string(home) + "/.local/share/game_anti_dither/dumps/" + proc);
+    char path_orig[512];
+    char path_patched[512];
+    char path_report[512];
+
+    std::snprintf(path_orig, sizeof(path_orig), "%s/shader_%08x_orig.spv", dir.c_str(), hash);
+    std::snprintf(path_patched, sizeof(path_patched), "%s/shader_%08x_patched.spv", dir.c_str(), hash);
+    std::snprintf(path_report, sizeof(path_report), "%s/shader_%08x_report.txt", dir.c_str(), hash);
+
+    FILE* f_orig = std::fopen(path_orig, "wb");
+    if (f_orig) {
+      std::fwrite(orig_code, sizeof(uint32_t), orig_words, f_orig);
+      std::fclose(f_orig);
     }
 
-    for (const auto& dir : base_dirs) {
-      make_dirs(dir);
-      char path_orig[512];
-      char path_patched[512];
-      char path_report[512];
+    FILE* f_patched = std::fopen(path_patched, "wb");
+    if (f_patched) {
+      std::fwrite(patched_code, sizeof(uint32_t), patched_words, f_patched);
+      std::fclose(f_patched);
+    }
 
-      std::snprintf(path_orig, sizeof(path_orig), "%s/shader_%08x_orig.spv", dir.c_str(), hash);
-      std::snprintf(path_patched, sizeof(path_patched), "%s/shader_%08x_patched.spv", dir.c_str(), hash);
-      std::snprintf(path_report, sizeof(path_report), "%s/shader_%08x_report.txt", dir.c_str(), hash);
-
-      FILE* f_orig = std::fopen(path_orig, "wb");
-      if (f_orig) {
-        std::fwrite(orig_code, sizeof(uint32_t), orig_words, f_orig);
-        std::fclose(f_orig);
-      }
-
-      FILE* f_patched = std::fopen(path_patched, "wb");
-      if (f_patched) {
-        std::fwrite(patched_code, sizeof(uint32_t), patched_words, f_patched);
-        std::fclose(f_patched);
-      }
-
-      FILE* f_rep = std::fopen(path_report, "w");
-      if (f_rep) {
-        std::fprintf(f_rep, "Shader Hash: 0x%08x\n", hash);
-        std::fprintf(f_rep, "Process: %s\n", g_detected_process.c_str());
-        std::fprintf(f_rep, "Words: %zu\n", orig_words);
-        std::fprintf(f_rep, "Dither NOPed: %u\n", dither_nops);
-        std::fprintf(f_rep, "Cutout Preserved: %u\n", preserved);
-        std::fprintf(f_rep, "Has FragCoord: %s\n", has_frag_coord ? "true" : "false");
-        std::fprintf(f_rep, "Has Image Sample: %s\n", has_sample ? "true" : "false");
-        std::fclose(f_rep);
-      }
+    FILE* f_rep = std::fopen(path_report, "w");
+    if (f_rep) {
+      std::fprintf(f_rep, "Shader Hash: 0x%08x\n", hash);
+      std::fprintf(f_rep, "Process: %s\n", g_detected_process.c_str());
+      std::fprintf(f_rep, "Words: %zu\n", orig_words);
+      std::fprintf(f_rep, "Dither NOPed: %u\n", dither_nops);
+      std::fprintf(f_rep, "Cutout Preserved: %u\n", preserved);
+      std::fprintf(f_rep, "Has FragCoord: %s\n", has_frag_coord ? "true" : "false");
+      std::fprintf(f_rep, "Has Image Sample: %s\n", has_sample ? "true" : "false");
+      std::fclose(f_rep);
     }
 #endif
   }
@@ -419,37 +455,27 @@ namespace game_logger {
       return;
 
     std::lock_guard<std::mutex> lock(get_logger_mutex());
-    std::string proc = get_clean_process_name();
-    const char* home = std::getenv("HOME");
+    const std::string& dir = ensure_dump_dir_ready();
 
-    std::vector<std::string> base_dirs;
-    base_dirs.push_back("/tmp/game_anti_dither/dumps/" + proc);
-    if (home) {
-      base_dirs.push_back(std::string(home) + "/.local/share/game_anti_dither/dumps/" + proc);
+    char path_vs[512];
+    char path_report[512];
+
+    std::snprintf(path_vs, sizeof(path_vs), "%s/shader_vs_%08x_fs_%08x.spv", dir.c_str(), vs_hash, fs_hash);
+    std::snprintf(path_report, sizeof(path_report), "%s/shader_vs_%08x_fs_%08x_report.txt", dir.c_str(), vs_hash, fs_hash);
+
+    FILE* f_vs = std::fopen(path_vs, "wb");
+    if (f_vs) {
+      std::fwrite(vs_code, sizeof(uint32_t), vs_words, f_vs);
+      std::fclose(f_vs);
     }
 
-    for (const auto& dir : base_dirs) {
-      make_dirs(dir);
-      char path_vs[512];
-      char path_report[512];
-
-      std::snprintf(path_vs, sizeof(path_vs), "%s/shader_vs_%08x_fs_%08x.spv", dir.c_str(), vs_hash, fs_hash);
-      std::snprintf(path_report, sizeof(path_report), "%s/shader_vs_%08x_fs_%08x_report.txt", dir.c_str(), vs_hash, fs_hash);
-
-      FILE* f_vs = std::fopen(path_vs, "wb");
-      if (f_vs) {
-        std::fwrite(vs_code, sizeof(uint32_t), vs_words, f_vs);
-        std::fclose(f_vs);
-      }
-
-      FILE* f_rep = std::fopen(path_report, "w");
-      if (f_rep) {
-        std::fprintf(f_rep, "Vertex Shader Hash: 0x%08x\n", vs_hash);
-        std::fprintf(f_rep, "Paired Fragment Shader Hash: 0x%08x\n", fs_hash);
-        std::fprintf(f_rep, "Process: %s\n", g_detected_process.c_str());
-        std::fprintf(f_rep, "Words: %zu\n", vs_words);
-        std::fclose(f_rep);
-      }
+    FILE* f_rep = std::fopen(path_report, "w");
+    if (f_rep) {
+      std::fprintf(f_rep, "Vertex Shader Hash: 0x%08x\n", vs_hash);
+      std::fprintf(f_rep, "Paired Fragment Shader Hash: 0x%08x\n", fs_hash);
+      std::fprintf(f_rep, "Process: %s\n", g_detected_process.c_str());
+      std::fprintf(f_rep, "Words: %zu\n", vs_words);
+      std::fclose(f_rep);
     }
 #endif
   }
