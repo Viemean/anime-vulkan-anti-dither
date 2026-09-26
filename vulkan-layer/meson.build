@@ -59,3 +59,11 @@ hsr_anti_dither_test = executable('hsr_anti_dither_test',
 
 test('hsr_anti_dither_test', hsr_anti_dither_test)
 
+genshin_anti_dither_test = executable('genshin_anti_dither_test',
+  'test/test_genshin_anti_dither.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('genshin_anti_dither_test', genshin_anti_dither_test)
+

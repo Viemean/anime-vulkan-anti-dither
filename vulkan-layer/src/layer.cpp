@@ -5,6 +5,7 @@
 #include "azur_promilia/azur_promilia_anti_dither.h"
 #include "nte/nte_anti_dither.h"
 #include "hsr/hsr_anti_dither.h"
+#include "genshin/genshin_anti_dither.h"
 #include "../addon/nte/memory_patcher.h"
 
 #include <mutex>
@@ -25,7 +26,9 @@ namespace {
   }
 
   inline void dispatch_anti_dither_process(uint32_t* code, size_t word_count) {
-    if (game_logger::is_hsr()) {
+    if (game_logger::is_genshin()) {
+      genshin_layer::process_spirv_anti_dither(code, word_count);
+    } else if (game_logger::is_hsr()) {
       hsr_layer::process_spirv_anti_dither(code, word_count);
     } else if (game_logger::is_nte()) {
       nte_layer::process_spirv_anti_dither(code, word_count);
@@ -164,7 +167,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
         size_t word_count = mod_info->codeSize / sizeof(uint32_t);
         patched_codes[i][s].assign(mod_info->pCode, mod_info->pCode + word_count);
 
-        if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT || ((game_logger::is_nte() || game_logger::is_hsr()) && stage.stage == VK_SHADER_STAGE_VERTEX_BIT)) {
+        if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT ||
+            ((game_logger::is_nte() || game_logger::is_hsr() || game_logger::is_genshin()) && stage.stage == VK_SHADER_STAGE_VERTEX_BIT)) {
           dispatch_anti_dither_process(patched_codes[i][s].data(), patched_codes[i][s].size());
         }
 
