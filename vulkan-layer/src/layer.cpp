@@ -5,11 +5,9 @@
 #include "azur_promilia/azur_promilia_anti_dither.h"
 #include "nte/nte_anti_dither.h"
 #include "hsr/hsr_anti_dither.h"
-#include "probe.h"
 #include "../addon/nte/memory_patcher.h"
 
 #include <mutex>
-#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 #include <cstring>
@@ -52,40 +50,12 @@ namespace {
     PFN_vkCreateShaderModule create_shader_module = nullptr;
     PFN_vkCreateGraphicsPipelines create_graphics_pipelines = nullptr;
     PFN_vkCreateComputePipelines create_compute_pipelines = nullptr;
-    PFN_vkAllocateCommandBuffers allocate_command_buffers = nullptr;
-    PFN_vkFreeCommandBuffers free_command_buffers = nullptr;
-    PFN_vkDestroyPipeline destroy_pipeline = nullptr;
-    PFN_vkCmdBindPipeline cmd_bind_pipeline = nullptr;
-    PFN_vkCmdDraw cmd_draw = nullptr;
-    PFN_vkCmdDrawIndexed cmd_draw_indexed = nullptr;
-    PFN_vkCmdDrawIndirect cmd_draw_indirect = nullptr;
-    PFN_vkCmdDrawIndexedIndirect cmd_draw_indexed_indirect = nullptr;
   };
 
   std::mutex g_lock;
   std::unordered_map<void*, InstanceData> g_instance_dispatch;
   std::unordered_map<void*, DeviceData> g_device_dispatch;
   std::unordered_map<VkPhysicalDevice, void*> g_phys_device_to_instance;
-
-  std::shared_mutex g_cmd_device_lock;
-  std::unordered_map<VkCommandBuffer, VkDevice> g_cmd_to_device;
-  std::atomic<VkDevice> g_primary_device{VK_NULL_HANDLE};
-  DeviceData g_primary_dev_data;
-
-  inline DeviceData get_dev_data_for_cmd(VkCommandBuffer cmd) {
-    VkDevice primary = g_primary_device.load(std::memory_order_relaxed);
-    if (primary != VK_NULL_HANDLE) {
-      return g_primary_dev_data;
-    }
-    std::shared_lock<std::shared_mutex> lock(g_cmd_device_lock);
-    auto it = g_cmd_to_device.find(cmd);
-    if (it != g_cmd_to_device.end()) {
-      std::lock_guard<std::mutex> dev_lock(g_lock);
-      auto dev_it = g_device_dispatch.find(get_dispatch_key(it->second));
-      if (dev_it != g_device_dispatch.end()) return dev_it->second;
-    }
-    return {};
-  }
 
   VkLayerInstanceCreateInfo* get_instance_chain_info(const VkInstanceCreateInfo* pCreateInfo, VkLayerFunction func) {
     auto* chain_info = static_cast<const VkLayerInstanceCreateInfo*>(pCreateInfo->pNext);
@@ -106,10 +76,6 @@ namespace {
     }
     return nullptr;
   }
-
-  static std::mutex g_module_spirv_lock;
-  static std::unordered_map<VkShaderModule, std::vector<uint32_t>> g_module_spirv_cache;
-  static std::unordered_map<VkShaderModule, uint32_t> g_module_hash_cache;
 
 } // namespace
 
@@ -135,25 +101,12 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateShaderModule(
     size_t word_count = pCreateInfo->codeSize / sizeof(uint32_t);
     std::vector<uint32_t> patched_code(pCreateInfo->pCode, pCreateInfo->pCode + word_count);
 
-    uint32_t orig_hash = game_logger::compute_spirv_hash(patched_code.data(), patched_code.size());
     dispatch_anti_dither_process(patched_code.data(), patched_code.size());
-    uint32_t new_hash = game_logger::compute_spirv_hash(patched_code.data(), patched_code.size());
 
     VkShaderModuleCreateInfo modified_info = *pCreateInfo;
     modified_info.pCode = patched_code.data();
 
-    VkResult res = dev_data.create_shader_module(device, &modified_info, pAllocator, pShaderModule);
-    if (res == VK_SUCCESS && pShaderModule && *pShaderModule) {
-      {
-        std::lock_guard<std::mutex> lk(g_module_spirv_lock);
-        g_module_spirv_cache[*pShaderModule] = patched_code;
-        g_module_hash_cache[*pShaderModule] = orig_hash;
-      }
-      if (orig_hash != new_hash) {
-        game_probe::register_character_shader_module(*pShaderModule);
-      }
-    }
-    return res;
+    return dev_data.create_shader_module(device, &modified_info, pAllocator, pShaderModule);
   }
 
   return dev_data.create_shader_module(device, pCreateInfo, pAllocator, pShaderModule);
@@ -185,10 +138,6 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
   std::vector<std::vector<VkPipelineShaderStageCreateInfo>> modified_stages(createInfoCount);
   std::vector<std::vector<VkShaderModuleCreateInfo>> modified_module_infos(createInfoCount);
   std::vector<std::vector<std::vector<uint32_t>>> patched_codes(createInfoCount);
-  std::vector<bool> pipeline_is_character(createInfoCount, false);
-  std::vector<bool> pipeline_is_shadow(createInfoCount, false);
-  std::vector<uint32_t> pipeline_vs_hash(createInfoCount, 0);
-  std::vector<uint32_t> pipeline_fs_hash(createInfoCount, 0);
 
   for (uint32_t i = 0; i < createInfoCount; ++i) {
     const auto& orig_info = pCreateInfos[i];
@@ -199,27 +148,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
     modified_module_infos[i].resize(orig_info.stageCount);
     patched_codes[i].resize(orig_info.stageCount);
 
-    uint32_t char_fs_hash = 0;
-    bool is_shadow_pipe = false;
-
     for (uint32_t s = 0; s < orig_info.stageCount; ++s) {
       auto& stage = modified_stages[i][s];
-
-      if (stage.module && game_probe::is_character_shader_module(stage.module)) {
-        pipeline_is_character[i] = true;
-        std::lock_guard<std::mutex> lk(g_module_spirv_lock);
-        auto it = g_module_hash_cache.find(stage.module);
-        if (it != g_module_hash_cache.end()) char_fs_hash = it->second;
-      }
-      if (stage.module) {
-        std::lock_guard<std::mutex> lk(g_module_spirv_lock);
-        auto it = g_module_hash_cache.find(stage.module);
-        if (it != g_module_hash_cache.end() && it->second == 0x492b730c) {
-          is_shadow_pipe = true;
-          pipeline_is_shadow[i] = true;
-        }
-      }
-
       const auto* header = static_cast<const VkBaseInStructure*>(stage.pNext);
       const VkShaderModuleCreateInfo* mod_info = nullptr;
       while (header) {
@@ -234,19 +164,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
         size_t word_count = mod_info->codeSize / sizeof(uint32_t);
         patched_codes[i][s].assign(mod_info->pCode, mod_info->pCode + word_count);
 
-        uint32_t orig_hash = game_logger::compute_spirv_hash(patched_codes[i][s].data(), patched_codes[i][s].size());
-        if (orig_hash == 0x492b730c) {
-          is_shadow_pipe = true;
-          pipeline_is_shadow[i] = true;
-        }
-        if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT ||
-            ((game_logger::is_nte() || game_logger::is_hsr()) && stage.stage == VK_SHADER_STAGE_VERTEX_BIT)) {
+        if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT || ((game_logger::is_nte() || game_logger::is_hsr()) && stage.stage == VK_SHADER_STAGE_VERTEX_BIT)) {
           dispatch_anti_dither_process(patched_codes[i][s].data(), patched_codes[i][s].size());
-        }
-        uint32_t new_hash = game_logger::compute_spirv_hash(patched_codes[i][s].data(), patched_codes[i][s].size());
-        if (orig_hash != new_hash) {
-          pipeline_is_character[i] = true;
-          char_fs_hash = orig_hash;
         }
 
         modified_module_infos[i][s] = *mod_info;
@@ -255,59 +174,10 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
       }
     }
 
-    if (char_fs_hash != 0) {
-      pipeline_fs_hash[i] = char_fs_hash;
-    }
-
-    if (pipeline_is_character[i] || is_shadow_pipe) {
-      for (uint32_t s = 0; s < orig_info.stageCount; ++s) {
-        auto& stage = modified_stages[i][s];
-        if (stage.stage == VK_SHADER_STAGE_VERTEX_BIT) {
-          const uint32_t* vs_ptr = nullptr;
-          size_t vs_words = 0;
-          uint32_t vs_hash = 0;
-
-          if (!patched_codes[i][s].empty()) {
-            vs_ptr = patched_codes[i][s].data();
-            vs_words = patched_codes[i][s].size();
-            vs_hash = game_logger::compute_spirv_hash(vs_ptr, vs_words);
-          } else if (stage.module) {
-            std::lock_guard<std::mutex> lk(g_module_spirv_lock);
-            auto it = g_module_spirv_cache.find(stage.module);
-            if (it != g_module_spirv_cache.end()) {
-              vs_ptr = it->second.data();
-              vs_words = it->second.size();
-              vs_hash = g_module_hash_cache[stage.module];
-            }
-          }
-
-          if (vs_ptr && vs_words > 0) {
-            pipeline_vs_hash[i] = vs_hash;
-            uint32_t paired_fs = is_shadow_pipe ? 0x492b730c : char_fs_hash;
-            game_logger::dump_character_vertex_shader(vs_ptr, vs_words, vs_hash, paired_fs);
-            game_logger::log_msg("[反虚化驱动层-StarRail] %s管线创建: 绑定 VS: 0x%08x | 对应 FS: 0x%08x | 顶点字长: %zu\n",
-                                 is_shadow_pipe ? "阴影" : "角色", vs_hash, paired_fs, vs_words);
-          }
-        }
-      }
-    }
-
     modified_infos[i].pStages = modified_stages[i].data();
   }
 
-  VkResult res = dev_data.create_graphics_pipelines(device, pipelineCache, createInfoCount, modified_infos.data(), pAllocator, pPipelines);
-  if (res == VK_SUCCESS && pPipelines) {
-    for (uint32_t i = 0; i < createInfoCount; ++i) {
-      if (pPipelines[i]) {
-        if (pipeline_is_character[i]) {
-          game_probe::register_pipeline(pPipelines[i], true, false, pipeline_vs_hash[i], pipeline_fs_hash[i]);
-        } else if (pipeline_is_shadow[i]) {
-          game_probe::register_pipeline(pPipelines[i], false, true, pipeline_vs_hash[i], 0x492b730c);
-        }
-      }
-    }
-  }
-  return res;
+  return dev_data.create_graphics_pipelines(device, pipelineCache, createInfoCount, modified_infos.data(), pAllocator, pPipelines);
 }
 
 static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateComputePipelines(
@@ -359,131 +229,6 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateComputePipelines(
   }
 
   return dev_data.create_compute_pipelines(device, pipelineCache, createInfoCount, modified_infos.data(), pAllocator, pPipelines);
-}
-
-static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkAllocateCommandBuffers(
-    VkDevice                                    device,
-    const VkCommandBufferAllocateInfo*          pAllocateInfo,
-    VkCommandBuffer*                            pCommandBuffers) {
-  DeviceData dev_data;
-  {
-    std::lock_guard<std::mutex> lock(g_lock);
-    auto it = g_device_dispatch.find(get_dispatch_key(device));
-    if (it != g_device_dispatch.end()) dev_data = it->second;
-  }
-  if (!dev_data.allocate_command_buffers) return VK_ERROR_INITIALIZATION_FAILED;
-
-  VkResult res = dev_data.allocate_command_buffers(device, pAllocateInfo, pCommandBuffers);
-  if (res == VK_SUCCESS && pAllocateInfo && pCommandBuffers) {
-    std::unique_lock<std::shared_mutex> lock(g_cmd_device_lock);
-    for (uint32_t i = 0; i < pAllocateInfo->commandBufferCount; ++i) {
-      g_cmd_to_device[pCommandBuffers[i]] = device;
-    }
-  }
-  return res;
-}
-
-static VKAPI_ATTR void VKAPI_CALL wuwa_vkFreeCommandBuffers(
-    VkDevice                                    device,
-    VkCommandPool                               commandPool,
-    uint32_t                                    commandBufferCount,
-    const VkCommandBuffer*                      pCommandBuffers) {
-  DeviceData dev_data;
-  {
-    std::lock_guard<std::mutex> lock(g_lock);
-    auto it = g_device_dispatch.find(get_dispatch_key(device));
-    if (it != g_device_dispatch.end()) dev_data = it->second;
-  }
-  if (pCommandBuffers) {
-    std::unique_lock<std::shared_mutex> lock(g_cmd_device_lock);
-    for (uint32_t i = 0; i < commandBufferCount; ++i) {
-      g_cmd_to_device.erase(pCommandBuffers[i]);
-      game_probe::on_cmd_reset_or_free(pCommandBuffers[i]);
-    }
-  }
-  if (dev_data.free_command_buffers) {
-    dev_data.free_command_buffers(device, commandPool, commandBufferCount, pCommandBuffers);
-  }
-}
-
-static VKAPI_ATTR void VKAPI_CALL wuwa_vkDestroyPipeline(
-    VkDevice                                    device,
-    VkPipeline                                  pipeline,
-    const VkAllocationCallbacks*                pAllocator) {
-  DeviceData dev_data;
-  {
-    std::lock_guard<std::mutex> lock(g_lock);
-    auto it = g_device_dispatch.find(get_dispatch_key(device));
-    if (it != g_device_dispatch.end()) dev_data = it->second;
-  }
-  game_probe::unregister_pipeline(pipeline);
-  if (dev_data.destroy_pipeline) {
-    dev_data.destroy_pipeline(device, pipeline, pAllocator);
-  }
-}
-
-static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdBindPipeline(
-    VkCommandBuffer                             commandBuffer,
-    VkPipelineBindPoint                         pipelineBindPoint,
-    VkPipeline                                  pipeline) {
-  DeviceData dev_data = get_dev_data_for_cmd(commandBuffer);
-  game_probe::on_bind_pipeline(commandBuffer, pipelineBindPoint, pipeline);
-  if (dev_data.cmd_bind_pipeline) {
-    dev_data.cmd_bind_pipeline(commandBuffer, pipelineBindPoint, pipeline);
-  }
-}
-
-static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDraw(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    vertexCount,
-    uint32_t                                    instanceCount,
-    uint32_t                                    firstVertex,
-    uint32_t                                    firstInstance) {
-  DeviceData dev_data = get_dev_data_for_cmd(commandBuffer);
-  game_probe::on_draw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
-  if (dev_data.cmd_draw) {
-    dev_data.cmd_draw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
-  }
-}
-
-static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDrawIndexed(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    indexCount,
-    uint32_t                                    instanceCount,
-    uint32_t                                    firstIndex,
-    int32_t                                     vertexOffset,
-    uint32_t                                    firstInstance) {
-  DeviceData dev_data = get_dev_data_for_cmd(commandBuffer);
-  game_probe::on_draw_indexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-  if (dev_data.cmd_draw_indexed) {
-    dev_data.cmd_draw_indexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-  }
-}
-
-static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDrawIndirect(
-    VkCommandBuffer                             commandBuffer,
-    VkBuffer                                    buffer,
-    VkDeviceSize                                offset,
-    uint32_t                                    drawCount,
-    uint32_t                                    stride) {
-  DeviceData dev_data = get_dev_data_for_cmd(commandBuffer);
-  game_probe::on_draw(commandBuffer);
-  if (dev_data.cmd_draw_indirect) {
-    dev_data.cmd_draw_indirect(commandBuffer, buffer, offset, drawCount, stride);
-  }
-}
-
-static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDrawIndexedIndirect(
-    VkCommandBuffer                             commandBuffer,
-    VkBuffer                                    buffer,
-    VkDeviceSize                                offset,
-    uint32_t                                    drawCount,
-    uint32_t                                    stride) {
-  DeviceData dev_data = get_dev_data_for_cmd(commandBuffer);
-  game_probe::on_draw(commandBuffer);
-  if (dev_data.cmd_draw_indexed_indirect) {
-    dev_data.cmd_draw_indexed_indirect(commandBuffer, buffer, offset, drawCount, stride);
-  }
 }
 
 static VKAPI_ATTR void VKAPI_CALL wuwa_vkDestroyDevice(
@@ -546,24 +291,11 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateDevice(
   dev_data.create_shader_module = (PFN_vkCreateShaderModule)fpGetDeviceProcAddr(*pDevice, "vkCreateShaderModule");
   dev_data.create_graphics_pipelines = (PFN_vkCreateGraphicsPipelines)fpGetDeviceProcAddr(*pDevice, "vkCreateGraphicsPipelines");
   dev_data.create_compute_pipelines = (PFN_vkCreateComputePipelines)fpGetDeviceProcAddr(*pDevice, "vkCreateComputePipelines");
-  dev_data.allocate_command_buffers = (PFN_vkAllocateCommandBuffers)fpGetDeviceProcAddr(*pDevice, "vkAllocateCommandBuffers");
-  dev_data.free_command_buffers = (PFN_vkFreeCommandBuffers)fpGetDeviceProcAddr(*pDevice, "vkFreeCommandBuffers");
-  dev_data.destroy_pipeline = (PFN_vkDestroyPipeline)fpGetDeviceProcAddr(*pDevice, "vkDestroyPipeline");
-  dev_data.cmd_bind_pipeline = (PFN_vkCmdBindPipeline)fpGetDeviceProcAddr(*pDevice, "vkCmdBindPipeline");
-  dev_data.cmd_draw = (PFN_vkCmdDraw)fpGetDeviceProcAddr(*pDevice, "vkCmdDraw");
-  dev_data.cmd_draw_indexed = (PFN_vkCmdDrawIndexed)fpGetDeviceProcAddr(*pDevice, "vkCmdDrawIndexed");
-  dev_data.cmd_draw_indirect = (PFN_vkCmdDrawIndirect)fpGetDeviceProcAddr(*pDevice, "vkCmdDrawIndirect");
-  dev_data.cmd_draw_indexed_indirect = (PFN_vkCmdDrawIndexedIndirect)fpGetDeviceProcAddr(*pDevice, "vkCmdDrawIndexedIndirect");
-
-  g_primary_device.store(*pDevice, std::memory_order_relaxed);
-  g_primary_dev_data = dev_data;
 
   {
     std::lock_guard<std::mutex> lock(g_lock);
     g_device_dispatch[get_dispatch_key(*pDevice)] = dev_data;
   }
-
-  game_probe::start_heartbeat_thread();
 
   return VK_SUCCESS;
 }
@@ -740,22 +472,6 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wuwa_vkGetDeviceProcAddr(
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCreateGraphicsPipelines);
   if (std::strcmp(pName, "vkCreateComputePipelines") == 0)
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCreateComputePipelines);
-  if (std::strcmp(pName, "vkAllocateCommandBuffers") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkAllocateCommandBuffers);
-  if (std::strcmp(pName, "vkFreeCommandBuffers") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkFreeCommandBuffers);
-  if (std::strcmp(pName, "vkDestroyPipeline") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkDestroyPipeline);
-  if (std::strcmp(pName, "vkCmdBindPipeline") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdBindPipeline);
-  if (std::strcmp(pName, "vkCmdDraw") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDraw);
-  if (std::strcmp(pName, "vkCmdDrawIndexed") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDrawIndexed);
-  if (std::strcmp(pName, "vkCmdDrawIndirect") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDrawIndirect);
-  if (std::strcmp(pName, "vkCmdDrawIndexedIndirect") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDrawIndexedIndirect);
 
   DeviceData dev_data;
   {
@@ -801,22 +517,6 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wuwa_vkGetInstanceProcAddr(
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCreateGraphicsPipelines);
   if (std::strcmp(pName, "vkCreateComputePipelines") == 0)
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCreateComputePipelines);
-  if (std::strcmp(pName, "vkAllocateCommandBuffers") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkAllocateCommandBuffers);
-  if (std::strcmp(pName, "vkFreeCommandBuffers") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkFreeCommandBuffers);
-  if (std::strcmp(pName, "vkDestroyPipeline") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkDestroyPipeline);
-  if (std::strcmp(pName, "vkCmdBindPipeline") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdBindPipeline);
-  if (std::strcmp(pName, "vkCmdDraw") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDraw);
-  if (std::strcmp(pName, "vkCmdDrawIndexed") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDrawIndexed);
-  if (std::strcmp(pName, "vkCmdDrawIndirect") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDrawIndirect);
-  if (std::strcmp(pName, "vkCmdDrawIndexedIndirect") == 0)
-    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDrawIndexedIndirect);
   if (std::strcmp(pName, "vkEnumerateInstanceLayerProperties") == 0)
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkEnumerateInstanceLayerProperties);
   if (std::strcmp(pName, "vkEnumerateInstanceExtensionProperties") == 0)
