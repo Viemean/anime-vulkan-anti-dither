@@ -64,14 +64,14 @@ namespace nte_vkd3d {
   }
 
   /*
-   * NTE (UE 5.5 / VKD3D-Proton) 专有反虚化引擎
+   * NTE (UE 5.5 / VKD3D-Proton) 反虚化驱动模块
    *
-   * 核心原则：
-   * 1. 严格区分：
-   *    - 纯纹理 Alpha Cutout（植被/树木/镂空贴图）：必须 100% 保留 Discard，绝不误杀！
-   *    - 屏幕空间网点虚化（角色身体、脸部、头发半透明 Bayer Dither）：必须 100% 消除！
-   * 2. 混合型材质（树木 LOD 交叉淡出 + 树叶贴图 Alpha 镂空）：
-   *    - 仅对纯 Dither 触发的分支做 NOP，或通过解耦剥离 Dither 噪声，保留纹理透明镂空。
+   * 处理逻辑：
+   * 1. 材质分类定界：
+   *    - 角色卡通材质：清除屏幕空间 Bayer 点阵虚化逻辑。
+   *    - 大世界与植被材质：保持纹理透明度镂空（Alpha Cutout），避免几何面片实心化。
+   * 2. 执行策略：
+   *    - 基于物料字长规模与数据流依赖进行范围隔离与噪声剥离。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
@@ -96,23 +96,19 @@ namespace nte_vkd3d {
 
     bool is_force_mode = (game_logger::g_force_hashes.count(shader_hash) > 0);
 
-    // 门禁 0: 仅处理由 VKD3D 翻译的游戏 DXIL 着色器 (Tool ID 30017)
-    // 严禁修改 VKD3D 翻译层内部的 Glslang 屏幕清除与 Mask 元着色器（如 shader_c16e0aa8）
+    // 仅处理 VKD3D 转译的游戏着色器 (Tool ID 30017)，排除内部元着色器
     uint32_t generator = spirv_code[2];
     uint32_t tool_id = (generator >> 16);
     if (tool_id != 30017 && !is_force_mode) {
       return;
     }
 
-    // 门禁：大世界复杂材质（树木、植被、森林、贴花、环境几何）绝对保护
-    // 实机数据证实：角色卡通着色器结构极其精炼，字长严格分布在 1100 ~ 1500 DW 之间
-    // 大世界树木植被包含复杂风场计算、次表面散射(SSS)与级联 LOD，字长普遍 >= 1800 DW (2600~4700 DW)
-    // 凡不在角色卡通着色器区间内的着色器，100% 保持原生逻辑直接放行，杜绝任何大世界物体被误伤成方形卡片
+    // 角色卡通材质字长分布于 [1100, 1500] DW 区间；大世界环境与植被材质字长通常 >= 1800 DW
     if ((word_count < 1100 || word_count > 1500) && !is_force_mode) {
       return;
     }
 
-    // 门禁：若着色器内无任何 discard/demote 指令，直接退出（不产生任何额外内存开销）
+    // 着色器不含 discard/demote 指令时跳过
     bool has_any_discard_opcode = false;
     for (size_t k = 5; k < word_count; ) {
       uint32_t w = spirv_code[k];
@@ -152,7 +148,7 @@ namespace nte_vkd3d {
 
     std::vector<uint8_t> is_bayer_fraction(bound, 0);
 
-    // Pass 1: 扫描内建变量（FragCoord）、特效标记、植被质心采样（Centroid）、Bayer 与 IGN 噪声常量
+    // Pass 1: 扫描 FragCoord、Bayer/IGN 常量及材质标记
     {
       size_t i = 5;
       while (i < word_count) {
@@ -200,7 +196,7 @@ namespace nte_vkd3d {
           FloatUint fu;
           fu.u = spirv_code[i + 3];
 
-          // UE5 3x3 Bayer 表特定分数特征 (0.1111..0.8888)
+          // 3x3 Bayer 矩阵分数值特征
           if ((fu.f >= 0.1110f && fu.f <= 0.1112f) ||
               (fu.f >= 0.2221f && fu.f <= 0.2223f) ||
               (fu.f >= 0.3332f && fu.f <= 0.3334f) ||
@@ -210,11 +206,10 @@ namespace nte_vkd3d {
               (fu.f >= 0.8887f && fu.f <= 0.8890f)) {
             if (res_id < bound) is_bayer_fraction[res_id] = 1;
           }
-          // UE5 Interleaved Gradient Noise / Dither 常用浮点常量
+          // IGN 与 Blue Noise 常量特征
           else if ((fu.f >= 0.06711f && fu.f <= 0.06712f) ||
                    (fu.f >= 0.005837f && fu.f <= 0.005838f) ||
                    (fu.f >= 52.982f && fu.f <= 52.983f) ||
-                   // UE5.5 Blue Noise 屏幕抖动网格特征常数 (1/64, 1/6)
                    (fu.f >= 0.015624f && fu.f <= 0.015626f) ||
                    (fu.f >= 0.16664f && fu.f <= 0.16667f)) {
             if (res_id < bound) {
@@ -252,17 +247,17 @@ namespace nte_vkd3d {
       }
     }
 
-    // 粒子与 Niagara 特效保护
+    // 排除 Niagara 与粒子特效
     if (is_niagara_or_particle && !is_force_mode) {
       return;
     }
 
-    // 树木植被保护：如果属于大世界植被（带 centroid 质心抗锯齿采样），绝不出卡片，保持 100% 原始逻辑放行
+    // 排除包含 Centroid 修饰的大世界植被着色器
     if (is_foliage_or_vegetation && !is_force_mode) {
       return;
     }
 
-    // Pass 2: 前向 SSA 数据流分析（区分 FragCoord 屏幕空间衍生值与贴图采样衍生值）
+    // Pass 2: 追踪 FragCoord、贴图采样与 Dither 噪声传播
     bool changed = true;
     uint32_t iteration = 0;
     constexpr uint32_t max_iterations = 24;
@@ -304,11 +299,10 @@ namespace nte_vkd3d {
           res_id = (opcode >= 19 && opcode <= 39) ? spirv_code[i + 1] : spirv_code[i + 2];
         }
 
-        // 纹理贴图采样（标记贴图采样衍生值）
+        // 标记非 FragCoord 采样的纹理输出
         if (is_image_sample_opcode(opcode) && length >= 5) {
           uint32_t coord_id = spirv_code[i + 4];
           if (coord_id < bound && !depends_on_frag_coord[coord_id]) {
-            // 采样坐标来自模型顶点纹理（如 TEXCOORD），定性为模型/植被贴图透明度采样
             has_any_sample = true;
             if (res_id < bound && !depends_on_sample[res_id]) {
               depends_on_sample[res_id] = 1;
@@ -317,7 +311,6 @@ namespace nte_vkd3d {
           }
         }
 
-        // 变量加载 Load 与 AccessChain
         if (opcode == SPV_OP_LOAD && length >= 4) {
           uint32_t ptr_id = spirv_code[i + 3];
           if (ptr_id < bound) {
@@ -346,7 +339,7 @@ namespace nte_vkd3d {
           }
         }
 
-        // 屏幕空间点积（IGN / Bayer 噪声生成点：必须含有 Dither 专用常数参与）
+        // 结合 FragCoord 与 Dither 常量的点积运算标记为噪声源
         if (opcode == SPV_OP_DOT && length >= 5) {
           uint32_t op1 = spirv_code[i + 3];
           uint32_t op2 = spirv_code[i + 4];
@@ -361,7 +354,7 @@ namespace nte_vkd3d {
           }
         }
 
-        // SSA 向下传播（严格限定在函数体内部执行指令）
+        // 传播数据流依赖；贴图采样产物不继承噪声属性
         if (current_func > 0 && res_id > 0 && res_id < bound) {
           uint16_t start_op = (opcode == SPV_OP_EXT_INST) ? 5 : 3;
           uint16_t end_op = length;
@@ -370,7 +363,6 @@ namespace nte_vkd3d {
           for (uint16_t k = start_op; k < end_op && (i + k) < word_count; ++k) {
             uint32_t op_val = spirv_code[i + k];
             if (op_val < bound) {
-              // 纹理贴图采样指令自身产物绝不能被标记为 Dither 噪声
               if (!is_image_sample_opcode(opcode) && is_dither_noise[op_val] && !is_dither_noise[res_id]) {
                 is_dither_noise[res_id] = 1;
                 changed = true;
@@ -391,7 +383,7 @@ namespace nte_vkd3d {
       }
     }
 
-    // Pass 3: 上游数学解耦与精准中和执行
+    // Pass 3: 执行上游解耦与下游中和
     size_t i = 5;
     uint32_t current_label = 0;
     uint32_t noped_count = 0;
@@ -406,30 +398,30 @@ namespace nte_vkd3d {
       if (opcode == SPV_OP_LABEL && length >= 2) {
         current_label = spirv_code[i + 1];
       }
-      // 上游解耦 1: OpSelect(Cond, 0.0, 1.0) -> 若 Cond 纯属 Dither 噪声且绝不依赖贴图采样，将选中的 0.0 旁路为 1.0
+      // 上游分支解耦：若条件依赖 Dither 且不依赖贴图采样，将 0.0 替换为 1.0
       else if (opcode == 169 /* OpSelect */ && length >= 6) {
         uint32_t cond = spirv_code[i + 3];
         if (cond < bound && is_dither_noise[cond] && !depends_on_sample[cond]) {
-          spirv_code[i + 4] = spirv_code[i + 5]; // TrueValue 替换为 FalseValue (1.0)
+          spirv_code[i + 4] = spirv_code[i + 5];
           noped_count++;
         }
       }
-      // 上游解耦 2: OpExtInst NMin(Alpha, DitherNoise) -> 重写为 NMin(Alpha, Alpha)，剥离 Dither 噪声
+      // 上游极值解耦：剥离 NMin/FMin 中的 Dither 噪声操作数
       else if (opcode == SPV_OP_EXT_INST && length >= 7) {
         uint32_t inst = spirv_code[i + 4];
         if (inst == 37 || inst == 79) { // GLSL.std.450 FMin (37) 或 NMin (79)
           uint32_t op1 = spirv_code[i + 5];
           uint32_t op2 = spirv_code[i + 6];
           if (op2 < bound && is_dither_noise[op2] && !is_dither_noise[op1]) {
-            spirv_code[i + 6] = op1; // NMin(op1, op1) == op1
+            spirv_code[i + 6] = op1;
             noped_count++;
           } else if (op1 < bound && is_dither_noise[op1] && !is_dither_noise[op2]) {
-            spirv_code[i + 5] = op2; // NMin(op2, op2) == op2
+            spirv_code[i + 5] = op2;
             noped_count++;
           }
         }
       }
-      // 下游保底: 针对通过门禁的角色卡通着色器，中和包含 Dither 噪声的 demote 指令
+      // 下游中和：消除依赖 Dither 噪声的 demote 函数调用
       else if (opcode == SPV_OP_FUNCTION_CALL && length >= 5) {
         uint32_t func_id = spirv_code[i + 3];
         uint32_t arg_id = spirv_code[i + 4];
@@ -454,7 +446,9 @@ namespace nte_vkd3d {
             preserved_cutout_count++;
           }
         }
-      } else if (is_discard_opcode(opcode)) {
+      }
+      // 下游中和：消除依赖 Dither 噪声的直接 discard 指令
+      else if (is_discard_opcode(opcode)) {
         uint32_t cond = (current_label < bound) ? cond_for_label[current_label] : 0;
         bool should_nop = false;
 
