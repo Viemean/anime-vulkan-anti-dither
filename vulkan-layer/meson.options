@@ -1,0 +1,5 @@
+option('logging',
+  type : 'boolean',
+  value : true,
+  description : 'Enable logging and diagnostic infrastructure (set to false for completely stripped release builds)'
+)

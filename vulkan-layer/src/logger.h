@@ -27,10 +27,14 @@ namespace game_logger {
   static bool g_initialized = false;
   static bool g_enabled = false;
   static bool g_dump_enabled = false;
+  static bool g_log_enabled = false; // 发行版默认静默，零磁盘 I/O 开销
   static std::string g_detected_process;
   static std::string g_clean_process_name;
   static std::unordered_set<uint32_t> g_exclude_hashes;
   static std::unordered_set<uint32_t> g_force_hashes;
+
+  inline void init_config();
+  inline bool is_log_enabled();
 
   inline void make_dirs(const std::string& path) {
     std::string current;
@@ -76,6 +80,14 @@ namespace game_logger {
   }
 
   inline void log_msg(const char* fmt, ...) {
+#ifdef DISABLE_LOGGING
+    (void)fmt;
+    return;
+#else
+    if (!is_log_enabled()) {
+      return;
+    }
+
     std::lock_guard<std::mutex> lock(get_logger_mutex());
     va_list args;
     std::string proc = get_clean_process_name();
@@ -117,6 +129,7 @@ namespace game_logger {
       }
     }
     va_end(args);
+#endif
   }
 
   inline void parse_hash_list(const char* env_val, std::unordered_set<uint32_t>& out_set) {
@@ -167,6 +180,8 @@ namespace game_logger {
         g_dump_enabled = (val == "1" || val == "true");
       } else if (key == "enabled" || key == "anti_dither") {
         g_enabled = (val == "1" || val == "true");
+      } else if (key == "log" || key == "logging" || key == "debug" || key == "enable_log") {
+        g_log_enabled = (val == "1" || val == "true");
       }
     }
   }
@@ -243,6 +258,14 @@ namespace game_logger {
     if (env_dump)
       g_dump_enabled = (std::strcmp(env_dump, "1") == 0 || std::strcmp(env_dump, "true") == 0);
 
+    const char* env_log = std::getenv("ANTI_DITHER_LOG");
+    if (!env_log)
+      env_log = std::getenv("ANTI_DITHER_DEBUG");
+    if (!env_log)
+      env_log = std::getenv("WUWA_LOG");
+    if (env_log)
+      g_log_enabled = (std::strcmp(env_log, "1") == 0 || std::strcmp(env_log, "true") == 0);
+
     const char* env_exclude = std::getenv("ANTI_DITHER_EXCLUDE_HASHES");
     if (env_exclude)
       parse_hash_list(env_exclude, g_exclude_hashes);
@@ -250,6 +273,11 @@ namespace game_logger {
     const char* env_force = std::getenv("ANTI_DITHER_FORCE_HASHES");
     if (env_force)
       parse_hash_list(env_force, g_force_hashes);
+  }
+
+  inline bool is_log_enabled() {
+    init_config();
+    return g_log_enabled;
   }
 
   inline bool is_active() {
@@ -286,6 +314,15 @@ namespace game_logger {
                                  const uint32_t* patched_code, size_t patched_words,
                                  uint32_t hash, uint32_t dither_nops, uint32_t preserved,
                                  bool has_frag_coord, bool has_sample) {
+#ifdef DISABLE_LOGGING
+    (void)orig_code; (void)orig_words; (void)patched_code; (void)patched_words;
+    (void)hash; (void)dither_nops; (void)preserved; (void)has_frag_coord; (void)has_sample;
+    return;
+#else
+    init_config();
+    if (!g_dump_enabled)
+      return;
+
     std::lock_guard<std::mutex> lock(get_logger_mutex());
     std::string proc = get_clean_process_name();
     const char* home = std::getenv("HOME");
@@ -330,6 +367,7 @@ namespace game_logger {
         std::fclose(f_rep);
       }
     }
+#endif
   }
 
 } // namespace game_logger

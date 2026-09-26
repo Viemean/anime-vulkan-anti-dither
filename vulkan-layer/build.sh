@@ -7,10 +7,18 @@ DIST_DIR="${SCRIPT_DIR}/dist"
 
 echo "==> [Vulkan Layer 构建] 开始构建 libwuwa_antidither_layer..."
 
+LOGGING_OPT="true"
+for arg in "$@"; do
+    if [[ "$arg" == "--no-logging" || "$arg" == "--clean-release" ]]; then
+        LOGGING_OPT="false"
+        echo "==> [发行构建模式] 彻底清除所有日志与诊断开销 (-Dlogging=false)"
+    fi
+done
+
 if [[ ! -d "${BUILD_DIR}" ]]; then
-    meson setup "${BUILD_DIR}" "${SCRIPT_DIR}" --buildtype release --strip
+    meson setup "${BUILD_DIR}" "${SCRIPT_DIR}" --buildtype release --strip -Dlogging="${LOGGING_OPT}"
 else
-    meson setup --reconfigure "${BUILD_DIR}" "${SCRIPT_DIR}" --buildtype release --strip
+    meson setup --reconfigure "${BUILD_DIR}" "${SCRIPT_DIR}" --buildtype release --strip -Dlogging="${LOGGING_OPT}"
 fi
 
 ninja -C "${BUILD_DIR}"
