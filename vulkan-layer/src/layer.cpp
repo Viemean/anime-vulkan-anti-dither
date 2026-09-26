@@ -4,11 +4,14 @@
 #include "wuwa/wuwa_anti_dither.h"
 #include "azur_promilia/azur_promilia_anti_dither.h"
 #include "nte/nte_anti_dither.h"
+#include "../addon/nte/memory_patcher.h"
 
 #include <mutex>
 #include <unordered_map>
 #include <vector>
 #include <cstring>
+#include <thread>
+#include <chrono>
 
 #define LAYER_NAME "VK_LAYER_WUWA_antidither"
 #define LAYER_DESC "Wuthering Waves Camera Dither Discard Neutralizer Layer"
@@ -564,6 +567,30 @@ extern "C" VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateInstance(
   {
     std::lock_guard<std::mutex> lock(g_lock);
     g_instance_dispatch[get_dispatch_key(*pInstance)] = inst_data;
+  }
+
+  if (game_logger::is_nte()) {
+    static std::once_flag s_nte_mem_probe_flag;
+    std::call_once(s_nte_mem_probe_flag, []() {
+      std::thread([]() {
+        game_logger::log_msg("[NTE-Addon] 启动相机防裁剪热补丁服务线程...\n");
+        int stable_confirm_count = 0;
+        for (int attempt = 1; attempt <= 30; ++attempt) {
+          std::this_thread::sleep_for(std::chrono::seconds(2));
+
+          bool ok = nte_mem::apply_anti_hide_camera_patch();
+          if (ok) {
+            stable_confirm_count++;
+            if (stable_confirm_count >= 3) {
+              game_logger::log_msg("[NTE-Addon] 相机防裁剪热补丁已确认稳定常驻 (轮次: %d)\n", attempt);
+              break;
+            }
+          } else {
+            stable_confirm_count = 0;
+          }
+        }
+      }).detach();
+    });
   }
 
   return VK_SUCCESS;

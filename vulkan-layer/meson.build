@@ -37,3 +37,11 @@ nte_anti_dither_test = executable('nte_anti_dither_test',
 
 test('nte_anti_dither_test', nte_anti_dither_test)
 
+memory_patcher_test = executable('memory_patcher_test',
+  'test/test_memory_patcher.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('memory_patcher_test', memory_patcher_test)
+
