@@ -13,4 +13,7 @@ vulkan-layer/subprojects/*
 /upstream/
 /release.sh
 /README.md
+/NTE_ANTI_HIDE_RESEARCH_NOTES.md
+/AGENTS.md
+docs/
 
