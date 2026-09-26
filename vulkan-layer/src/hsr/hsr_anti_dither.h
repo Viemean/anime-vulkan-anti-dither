@@ -1,0 +1,53 @@
+#pragma once
+
+#include "hsr_dxvk.h"
+
+namespace hsr_layer {
+
+  enum class ShaderStage {
+    Unknown,
+    Vertex,
+    Fragment,
+    Compute
+  };
+
+  inline ShaderStage detect_shader_stage(const uint32_t* spirv_code, size_t word_count) {
+    if (!spirv_code || word_count < 5)
+      return ShaderStage::Unknown;
+
+    size_t i = 5;
+    while (i < word_count) {
+      uint32_t word = spirv_code[i];
+      uint16_t opcode = word & 0xFFFF;
+      uint16_t length = (word >> 16) & 0xFFFF;
+      if (length == 0 || (i + length) > word_count)
+        break;
+
+      if (opcode == 15 /* OpEntryPoint */ && length >= 3) {
+        uint32_t exec_model = spirv_code[i + 1];
+        switch (exec_model) {
+          case 0: return ShaderStage::Vertex;
+          case 4: return ShaderStage::Fragment;
+          case 5: return ShaderStage::Compute;
+          default: return ShaderStage::Unknown;
+        }
+      }
+      i += length;
+    }
+    return ShaderStage::Unknown;
+  }
+
+  /**
+   * @brief HSR 顶层驱动分发处理函数
+   */
+  inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
+    auto stage = detect_shader_stage(spirv_code, word_count);
+    // HSR 点阵虚化仅发生在像素阶段 (Fragment Shader / Pixel Shader)
+    if (stage != ShaderStage::Fragment) {
+      return;
+    }
+
+    hsr_dxvk::process_spirv_anti_dither(spirv_code, word_count);
+  }
+
+} // namespace hsr_layer

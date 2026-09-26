@@ -301,6 +301,12 @@ namespace game_logger {
            g_detected_process.find("Promilia") != std::string::npos;
   }
 
+  inline bool is_hsr() {
+    init_config();
+    return g_detected_process.find("StarRail") != std::string::npos ||
+           g_detected_process.find("Star Rail") != std::string::npos;
+  }
+
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {
     uint32_t hash = 2166136261u;
     for (size_t i = 0; i < word_count; ++i) {

@@ -51,3 +51,11 @@ memory_patcher_test = executable('memory_patcher_test',
 
 test('memory_patcher_test', memory_patcher_test)
 
+hsr_anti_dither_test = executable('hsr_anti_dither_test',
+  'test/test_hsr_anti_dither.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('hsr_anti_dither_test', hsr_anti_dither_test)
+
