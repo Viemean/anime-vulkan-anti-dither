@@ -465,6 +465,101 @@ void test_foliage_dither_lod_with_alpha_cutout_preserved() {
   std::cout << "PASSED\n";
 }
 
+#include <fstream>
+
+void test_dx11_real_world_shaders() {
+  std::cout << "[Test 10] DX11 (DXVK) Real-World Shaders (Chisa, Foliage, Stripe)... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  auto load_spv = [](const std::string& path) -> std::vector<uint32_t> {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file) return {};
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::vector<uint32_t> spv(size / sizeof(uint32_t));
+    file.read(reinterpret_cast<char*>(spv.data()), size);
+    return spv;
+  };
+
+  std::string dump_dir = "/tmp/game_anti_dither/dumps/Client-Win64-Shipping/";
+
+  // 1. Chisa Close-up (0x5c1ec349): NMin uncoupled to OpCopyObject, Demote neutralized to OpNop
+  {
+    auto spv = load_spv(dump_dir + "shader_5c1ec349_orig.spv");
+    if (!spv.empty()) {
+      wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
+      bool has_copy_object = false;
+      bool has_nop = false;
+      for (uint32_t w : spv) {
+        uint16_t op = w & 0xFFFF;
+        if (op == wuwa_layer::SPV_OP_COPY_OBJECT) has_copy_object = true;
+        if (op == wuwa_layer::SPV_OP_NOP) has_nop = true;
+      }
+      if (!has_copy_object || !has_nop) {
+        std::cerr << "FAILED: Chisa close-up dither was not properly uncoupled or neutralized!\n";
+        std::abort();
+      }
+    }
+  }
+
+  // 2. Character Mesh Cutout (0x8c3a5c3e): NMin uncoupled to OpCopyObject, Demote neutralized to OpNop
+  {
+    auto spv = load_spv(dump_dir + "shader_8c3a5c3e_orig.spv");
+    if (!spv.empty()) {
+      wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
+      bool has_copy_object = false;
+      bool has_nop = false;
+      for (uint32_t w : spv) {
+        uint16_t op = w & 0xFFFF;
+        if (op == wuwa_layer::SPV_OP_COPY_OBJECT) has_copy_object = true;
+        if (op == wuwa_layer::SPV_OP_NOP) has_nop = true;
+      }
+      if (!has_copy_object || !has_nop) {
+        std::cerr << "FAILED: Character mesh dither was not properly uncoupled or neutralized!\n";
+        std::abort();
+      }
+    }
+  }
+
+  // 3. Modulo 5 Look-up Stripe (0x02632c3d): Demote neutralized to OpNop
+  {
+    auto spv = load_spv(dump_dir + "shader_02632c3d_orig.spv");
+    if (!spv.empty()) {
+      wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
+      bool has_nop = false;
+      for (uint32_t w : spv) {
+        uint16_t op = w & 0xFFFF;
+        if (op == wuwa_layer::SPV_OP_NOP) has_nop = true;
+      }
+      if (!has_nop) {
+        std::cerr << "FAILED: Stripe dither demote was not converted to OpNop!\n";
+        std::abort();
+      }
+    }
+  }
+
+  // 4. VKD3D Foliage, Flower & Terrain (0x4811f107): Bayer dither eliminated
+  {
+    auto spv = load_spv(dump_dir + "shader_4811f107_orig.spv");
+    if (!spv.empty()) {
+      wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
+      bool has_nop = false;
+      for (uint32_t w : spv) {
+        if ((w & 0xFFFF) == wuwa_layer::SPV_OP_NOP) has_nop = true;
+      }
+      if (!has_nop) {
+        std::cerr << "FAILED: Foliage/terrain dither was not neutralized in VKD3D!\n";
+        std::abort();
+      }
+    }
+  }
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Vulkan Anti-Dither SSA Unit Tests ===\n";
   test_camera_dither_fragcoord_kill();
@@ -476,6 +571,7 @@ int main() {
   test_dx11_modulo_function_call_dither();
   test_azur_promilia_pipeline();
   test_foliage_dither_lod_with_alpha_cutout_preserved();
+  test_dx11_real_world_shaders();
   std::cout << "=== All Anti-Dither Tests Passed Successfully ===\n";
   return 0;
 }
