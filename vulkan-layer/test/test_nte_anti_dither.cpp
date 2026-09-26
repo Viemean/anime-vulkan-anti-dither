@@ -400,6 +400,27 @@ void test_nte_real_world_dump_shader() {
     }
   }
 
+  // 测试 shader 8: shader_dc232b9a (角色眼眶贴花遮罩：必须 100% 保留镂空，绝不能修改产生黑洞)
+  const char* path8 = "/tmp/game_anti_dither/dumps/HTGame/shader_dc232b9a_orig.spv";
+  FILE* fp8 = std::fopen(path8, "rb");
+  if (fp8) {
+    std::fseek(fp8, 0, SEEK_END);
+    size_t bytes8 = std::ftell(fp8);
+    std::fseek(fp8, 0, SEEK_SET);
+
+    std::vector<uint32_t> spv8(bytes8 / sizeof(uint32_t));
+    std::fread(spv8.data(), sizeof(uint32_t), spv8.size(), fp8);
+    std::fclose(fp8);
+
+    auto orig8 = spv8;
+    nte_vkd3d::process_spirv_anti_dither(spv8.data(), spv8.size());
+
+    if (spv8 != orig8) {
+      std::cerr << "FAILED: Eye socket decal mask shader dc232b9a was corrupted (would cause eye black hole)!\n";
+      std::abort();
+    }
+  }
+
   std::cout << "PASSED\n";
 }
 

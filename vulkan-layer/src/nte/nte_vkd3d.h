@@ -96,6 +96,15 @@ namespace nte_vkd3d {
 
     bool is_force_mode = (game_logger::g_force_hashes.count(shader_hash) > 0);
 
+    // 排除角色眼眶阴影与面部贴花遮罩（Eye Socket Decal Mask，保护眼部镂空避免黑色空洞）
+    static const std::unordered_set<uint32_t> k_eye_socket_decal_hashes = {
+      0x08b19454, 0xd583ec38, 0x717a7d1a, 0x86b5f8ee,
+      0x50e17c06, 0x9ed97ff9, 0xe5147a5f, 0xdc232b9a, 0x9d19e033
+    };
+    if (k_eye_socket_decal_hashes.find(shader_hash) != k_eye_socket_decal_hashes.end() && !is_force_mode) {
+      return;
+    }
+
     // 仅处理 VKD3D 转译的游戏着色器 (Tool ID 30017)，排除内部元着色器
     uint32_t generator = spirv_code[2];
     uint32_t tool_id = (generator >> 16);
@@ -206,7 +215,7 @@ namespace nte_vkd3d {
               (fu.f >= 0.8887f && fu.f <= 0.8890f)) {
             if (res_id < bound) is_bayer_fraction[res_id] = 1;
           }
-          // IGN 与 Blue Noise 常量特征
+          // IGN 与 UE 5.5 Stipple 噪声常量特征
           else if ((fu.f >= 0.06711f && fu.f <= 0.06712f) ||
                    (fu.f >= 0.005837f && fu.f <= 0.005838f) ||
                    (fu.f >= 52.982f && fu.f <= 52.983f) ||
@@ -245,6 +254,11 @@ namespace nte_vkd3d {
         }
         i += length;
       }
+    }
+
+    // 若未匹配到任何 Bayer 点阵或 IGN 噪声特征，直接跳过，避免误杀眼部/贴花等正常遮罩
+    if (!has_dither_signature && !is_force_mode) {
+      return;
     }
 
     // 排除 Niagara 与粒子特效
@@ -432,7 +446,8 @@ namespace nte_vkd3d {
           if (is_force_mode) {
             should_nop = true;
           } else if (arg_id < bound) {
-            if (is_dither_noise[arg_id]) {
+            // 保护带贴图采样的 Alpha 镂空：若条件依赖纹理采样，绝不能 NOP demote，否则会导致眼眶/布料/树叶镂空失效变成黑方块
+            if (is_dither_noise[arg_id] && !depends_on_sample[arg_id]) {
               should_nop = true;
             }
           }
@@ -455,7 +470,8 @@ namespace nte_vkd3d {
         if (is_force_mode) {
           should_nop = true;
         } else if (cond > 0 && cond < bound) {
-          if (is_dither_noise[cond]) {
+          // 保护带贴图采样的 Alpha 镂空
+          if (is_dither_noise[cond] && !depends_on_sample[cond]) {
             should_nop = true;
           }
         }
