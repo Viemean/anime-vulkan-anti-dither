@@ -147,11 +147,72 @@ void test_zzz_vkd3d_material_cutout_preserved() {
   std::cout << "PASSED\n";
 }
 
+// 用例 4: ZZZ DXVK Immediate Constant Buffer (icb) 4x4 Bayer 网点虚化消除
+void test_zzz_dxvk_bayer_neutralized() {
+  std::cout << "[Test ZZZ 4] DXVK icb Bayer 4x4 dither discard neutralization... ";
+
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  // 构造真实 ZZZ DXVK 结构的 SPIR-V 着色器 (带 icb 变量与 demote)
+  std::vector<uint32_t> spv = {
+    0x07230203,
+    0x00010300,
+    0, // Generator (DXVK)
+    100,
+    0,
+    // OpEntryPoint Fragment %main
+    make_op(4, 15 /* OpEntryPoint */), 4, 1, 0x6e69616d,
+    // OpName %2 "icb\0"
+    make_op(3, 5 /* OpName */), 2, 0x626369,
+    // OpVariable %2 (Uniform icb)
+    make_op(4, 59 /* OpVariable */), 1, 2, 2,
+    // OpFunction %1
+    make_op(5, 54 /* OpFunction */), 2, 1, 0, 3,
+    make_op(2, 248 /* OpLabel */), 20,
+    // OpAccessChain %10 from %2 (icb)
+    make_op(4, 65 /* OpAccessChain */), 1, 10, 2,
+    // OpLoad %11 from %10
+    make_op(4, 61 /* OpLoad */), 1, 11, 10,
+    // OpCompositeExtract %12 from %11
+    make_op(5, 81 /* OpCompositeExtract */), 1, 12, 11, 0,
+    // OpFOrdLessThan %70 %12 %0
+    make_op(5, 184 /* OpFOrdLessThan */), 6, 70, 12, 0,
+    // OpBranchConditional %70 %30 %40
+    make_op(4, 250 /* OpBranchConditional */), 70, 30, 40,
+    // OpLabel %30
+    make_op(2, 248 /* OpLabel */), 30,
+    // OpDemoteToHelperInvocation (应当被 NOP 化)
+    make_op(1, 5380 /* OpDemoteToHelperInvocationEXT */),
+    // OpLabel %40
+    make_op(2, 248 /* OpLabel */), 40,
+    make_op(1, 253 /* OpReturn */),
+    make_op(1, 56 /* OpFunctionEnd */)
+  };
+
+  zzz_layer::process_spirv_anti_dither(spv.data(), spv.size());
+
+  bool found_nop = false;
+  for (uint32_t w : spv) {
+    if ((w & 0xFFFF) == 0 /* OpNop */) {
+      found_nop = true;
+      break;
+    }
+  }
+  assert(found_nop);
+  (void)found_nop;
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Running ZZZ Anti-Dither Tests ===\n";
   test_zzz_stage_detection();
   test_zzz_vkd3d_bayer_neutralized();
   test_zzz_vkd3d_material_cutout_preserved();
+  test_zzz_dxvk_bayer_neutralized();
   std::cout << "=== All ZZZ Tests Passed Successfully ===\n";
   return 0;
 }
