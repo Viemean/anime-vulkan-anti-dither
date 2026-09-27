@@ -76,8 +76,10 @@ build_and_package_arch() {
         "-Dlogging=true"
     )
 
-    local tmp_cross_file=""
     if [[ "${cross_needed}" == "true" ]]; then
+        mkdir -p "${build_dir}"
+        local cross_file="${build_dir}/cross-file.ini"
+
         if [[ "${target}" == "aarch64" ]]; then
             if ! command -v aarch64-linux-gnu-g++ >/dev/null 2>&1; then
                 echo "==> [跳过] 当前环境未检测到 aarch64-linux-gnu-g++ 交叉编译器。"
@@ -85,8 +87,7 @@ build_and_package_arch() {
                 return 0
             fi
 
-            tmp_cross_file=$(mktemp --tmpdir cross-aarch64-XXXXXX.ini)
-            cat > "${tmp_cross_file}" <<EOF
+            cat > "${cross_file}" <<EOF
 [binaries]
 c = 'aarch64-linux-gnu-gcc'
 cpp = 'aarch64-linux-gnu-g++'
@@ -100,15 +101,14 @@ cpu_family = 'aarch64'
 cpu = 'aarch64'
 endian = 'little'
 EOF
-            meson_args+=("--cross-file" "${tmp_cross_file}")
+            meson_args+=("--cross-file" "${cross_file}")
         elif [[ "${target}" == "x86_64" ]]; then
             if ! command -v x86_64-linux-gnu-g++ >/dev/null 2>&1; then
                 echo "==> [跳过] 当前环境未检测到 x86_64-linux-gnu-g++ 交叉编译器。"
                 return 0
             fi
 
-            tmp_cross_file=$(mktemp --tmpdir cross-x86_64-XXXXXX.ini)
-            cat > "${tmp_cross_file}" <<EOF
+            cat > "${cross_file}" <<EOF
 [binaries]
 c = 'x86_64-linux-gnu-gcc'
 cpp = 'x86_64-linux-gnu-g++'
@@ -122,7 +122,7 @@ cpu_family = 'x86_64'
 cpu = 'x86_64'
 endian = 'little'
 EOF
-            meson_args+=("--cross-file" "${tmp_cross_file}")
+            meson_args+=("--cross-file" "${cross_file}")
         fi
     fi
 
@@ -131,10 +131,6 @@ EOF
         meson setup "${build_dir}" "${VULKAN_DIR}" "${meson_args[@]}"
     else
         meson setup --reconfigure "${build_dir}" "${VULKAN_DIR}" "${meson_args[@]}"
-    fi
-
-    if [[ -n "${tmp_cross_file}" && -f "${tmp_cross_file}" ]]; then
-        rm -f "${tmp_cross_file}"
     fi
 
     # 编译动态库
