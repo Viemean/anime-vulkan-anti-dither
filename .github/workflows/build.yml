@@ -28,13 +28,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            meson \
+            python3-pip \
+            python3-setuptools \
             ninja-build \
             libvulkan-dev \
             zstd \
             dpkg-dev \
             gcc-aarch64-linux-gnu \
             g++-aarch64-linux-gnu
+          sudo python3 -m pip install --upgrade meson
 
       - name: Build and package (x86_64 & aarch64/arm64)
         run: |
