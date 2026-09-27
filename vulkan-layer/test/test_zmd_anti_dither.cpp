@@ -168,11 +168,157 @@ void test_zmd_fence_foliage_alpha_cutout_preserved() {
   std::cout << "PASSED\n";
 }
 
+// 用例 4: 终末地 DXVK 翻译层识别与分发测试
+void test_zmd_dxvk_backend_detection() {
+  std::cout << "[Test ZMD 4] DXVK backend detection (icb / cb0 / OpDemote)... ";
+
+  // DXVK 着色器样本: 带有 OpName "icb" 与 "cb0"
+  std::vector<uint32_t> dxvk_spv = {
+    zmd_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    0, // Generator
+    50,
+    0,
+    make_op(3, 5 /* OpName */), 10, 0x00626369, // "icb\0"
+    make_op(4, 15 /* OpEntryPoint */), 4, 4, 0x6e69616d,
+    make_op(5, 54 /* OpFunction */), 2, 1, 0, 3
+  };
+
+  assert(zmd_layer::is_dxvk_translation_layer(dxvk_spv.data(), dxvk_spv.size()) == true);
+
+  // 原生 Vulkan 着色器样本: 无 DXVK 专有名字
+  std::vector<uint32_t> native_spv = {
+    zmd_vulkan::SPV_HEADER_MAGIC,
+    0x00010300,
+    0x00140000, // Google spiregg
+    50,
+    0,
+    make_op(4, 15 /* OpEntryPoint */), 4, 4, 0x6e69616d,
+    make_op(5, 54 /* OpFunction */), 2, 1, 0, 3
+  };
+
+  assert(zmd_layer::is_dxvk_translation_layer(native_spv.data(), native_spv.size()) == false);
+
+  std::cout << "PASSED\n";
+}
+
+// 用例 5: 终末地 DXVK Bayer 点阵消隐与 Demote 中和
+void test_zmd_dxvk_character_dither_neutralized() {
+  std::cout << "[Test ZMD 5] DXVK Character Bayer Dither (OpDemote neutralized)... ";
+
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  union { float f; uint32_t u; } f17;
+  f17.f = 17.0f;
+
+  std::vector<uint32_t> spv = {
+    zmd_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    0,
+    100,
+    0, // Schema
+    make_op(4, 15 /* OpEntryPoint */), 4, 1, 0x6e69616d,
+    make_op(3, 5 /* OpName */), 10, 0x00626369, // "icb\0"
+    make_op(4, 71 /* OpDecorate */), 10, zmd_dxvk::SPV_DECORATION_BUILTIN, zmd_dxvk::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, 43 /* OpConstant */), 1, 50, f17.u,
+    make_op(4, 59 /* OpVariable */), 1, 10, 1,
+    make_op(5, 54 /* OpFunction */), 2, 1, 0, 3,
+    make_op(2, 248 /* OpLabel */), 20,
+    make_op(4, 61 /* OpLoad */), 1, 60, 10,
+    make_op(5, 148 /* OpDot */), 1, 70, 60, 50,
+    make_op(5, 184 /* OpFOrdLessThan */), 6, 80, 70, 50,
+    make_op(4, 250 /* OpBranchConditional */), 80, 30, 40,
+    make_op(2, 248 /* OpLabel */), 30,
+    // OpDemoteToHelperInvocationEXT (DXVK 典型的 discard 翻译)
+    make_op(1, zmd_dxvk::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, 248 /* OpLabel */), 40,
+    make_op(1, 253),
+    make_op(1, 56)
+  };
+
+  zmd_layer::process_spirv_anti_dither(spv.data(), spv.size());
+
+  bool found_demote = false;
+  bool found_nop = false;
+  for (uint32_t w : spv) {
+    if ((w & 0xFFFF) == zmd_dxvk::SPV_OP_DEMOTE_TO_HELPER_INVOCATION) found_demote = true;
+    if ((w & 0xFFFF) == 0 && (w >> 16) == 1) found_nop = true;
+  }
+
+  if (found_demote || !found_nop) {
+    std::cerr << "FAILED: DXVK character Bayer OpDemote was not converted to OpNop!\n";
+    std::abort();
+  }
+
+  std::cout << "PASSED\n";
+}
+
+// 用例 6: 终末地 DXVK 大世界铁丝网/植被贴图 Alpha Cutout 100% 保护
+void test_zmd_dxvk_alpha_cutout_preserved() {
+  std::cout << "[Test ZMD 6] DXVK Fence & Foliage Alpha Cutout (Preserved 100%)... ";
+
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  union { float f; uint32_t u; } f17;
+  f17.f = 17.0f;
+
+  std::vector<uint32_t> spv = {
+    zmd_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    0,
+    100,
+    0, // Schema
+    make_op(4, 15 /* OpEntryPoint */), 4, 1, 0x6e69616d,
+    make_op(3, 5 /* OpName */), 10, 0x00626369, // "icb\0"
+    make_op(4, 71 /* OpDecorate */), 10, zmd_dxvk::SPV_DECORATION_BUILTIN, zmd_dxvk::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, 43 /* OpConstant */), 1, 50, f17.u,
+    make_op(5, 54 /* OpFunction */), 2, 1, 0, 3,
+    make_op(2, 248 /* OpLabel */), 10,
+    // OpImageSampleImplicitLod (铁丝网纹理采样)
+    make_op(5, 87), 4, 15, 2, 3,
+    // OpFOrdLessThan %16 %15 %5 (Alpha Cutout)
+    make_op(5, 184), 6, 16, 15, 5,
+    make_op(4, 250 /* OpBranchConditional */), 16, 20, 30,
+    make_op(2, 248 /* OpLabel */), 20,
+    // OpDemoteToHelperInvocationEXT (依赖纹理采样，必须保留)
+    make_op(1, zmd_dxvk::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, 248 /* OpLabel */), 30,
+    make_op(1, 253),
+    make_op(1, 56)
+  };
+
+  zmd_layer::process_spirv_anti_dither(spv.data(), spv.size());
+
+  bool found_demote = false;
+  for (uint32_t w : spv) {
+    if ((w & 0xFFFF) == zmd_dxvk::SPV_OP_DEMOTE_TO_HELPER_INVOCATION) {
+      found_demote = true;
+      break;
+    }
+  }
+
+  if (!found_demote) {
+    std::cerr << "FAILED: DXVK Fence Alpha Cutout OpDemote was wrongly modified to OpNop!\n";
+    std::abort();
+  }
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
-  std::cout << "=== Arknights: Endfield (ZMD / Native Vulkan) Anti-Dither Unit Tests ===\n";
+  std::cout << "=== Arknights: Endfield (ZMD / Vulkan & DXVK) Anti-Dither Unit Tests ===\n";
   test_zmd_pipeline_stage_dispatch();
   test_zmd_character_bayer_dither_neutralized();
   test_zmd_fence_foliage_alpha_cutout_preserved();
+  test_zmd_dxvk_backend_detection();
+  test_zmd_dxvk_character_dither_neutralized();
+  test_zmd_dxvk_alpha_cutout_preserved();
   std::cout << "=== All ZMD Tests Passed Successfully ===\n";
   return 0;
 }
