@@ -138,7 +138,6 @@ namespace tof_vkd3d {
 
     bool has_any_frag_coord = false;
     bool has_any_sample = false;
-    bool has_dither_noise_sig = false;
     uint32_t demote_count = 0;
 
     // Pass 1: 扫描 FragCoord、常量与特征标记
@@ -173,7 +172,6 @@ namespace tof_vkd3d {
             if (res_id < bound) {
               is_dither_const[res_id] = 1;
               is_dither_noise[res_id] = 1;
-              has_dither_noise_sig = true;
             }
           }
           // DitherTemporalAA / Bayer 点阵常量特征
@@ -250,7 +248,6 @@ namespace tof_vkd3d {
         if (opcode == SPV_OP_UMOD && length >= 5) {
           if (res_id < bound && !is_dither_noise[res_id]) {
             is_dither_noise[res_id] = 1;
-            has_dither_noise_sig = true;
             changed = true;
           }
         }
@@ -293,7 +290,6 @@ namespace tof_vkd3d {
                 (depends_on_frag_coord[op1] || depends_on_frag_coord[op2])) {
               if (res_id < bound && !is_dither_noise[res_id]) {
                 is_dither_noise[res_id] = 1;
-                has_dither_noise_sig = true;
                 changed = true;
               }
             }
@@ -329,8 +325,8 @@ namespace tof_vkd3d {
       }
     }
 
-    // 排除小字长非游戏着色器 Quad
-    if (!has_any_sample && !has_dither_noise_sig && word_count < 800 && !is_force_mode) {
+    // 排除无纹理采样的小字长遮罩与深度着色器 (保护眼眶镂空避免黑色空洞)
+    if (!has_any_sample && word_count < 800 && !is_force_mode) {
       if (game_logger::g_dump_enabled) {
         game_logger::dump_shader_bundle(orig_copy.data(), orig_copy.size(),
                                         spirv_code, word_count,
@@ -367,6 +363,20 @@ namespace tof_vkd3d {
             noped_count++;
           } else if (op1 < bound && is_dither_noise[op1] && !is_dither_noise[op2]) {
             spirv_code[i + 5] = op2;
+            noped_count++;
+          }
+        }
+      }
+      // 上游逻辑解耦：剥离 LogicalOr 中的 Dither 噪声分支 (消除眼部/面部透视遮罩中的点阵)
+      else if (opcode == 166 /* OpLogicalOr */ && length >= 5) {
+        uint32_t op1 = spirv_code[i + 3];
+        uint32_t op2 = spirv_code[i + 4];
+        if (op1 < bound && op2 < bound) {
+          if (is_dither_noise[op1] && !is_dither_noise[op2]) {
+            spirv_code[i + 3] = op2;
+            noped_count++;
+          } else if (is_dither_noise[op2] && !is_dither_noise[op1]) {
+            spirv_code[i + 4] = op1;
             noped_count++;
           }
         }
