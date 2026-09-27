@@ -9,6 +9,7 @@
 #include "zzz/zzz_anti_dither.h"
 #include "HI3rd/hi3_anti_dither.h"
 #include "zmd/zmd_anti_dither.h"
+#include "gf2/gf2_anti_dither.h"
 #include "../addon/nte/memory_patcher.h"
 
 #include <mutex>
@@ -45,6 +46,8 @@ namespace {
       hi3_layer::process_spirv_anti_dither(code, word_count);
     } else if (game_logger::is_zmd()) {
       zmd_layer::process_spirv_anti_dither(code, word_count);
+    } else if (game_logger::is_gf2()) {
+      gf2_layer::process_spirv_anti_dither(code, word_count);
     }
   }
 

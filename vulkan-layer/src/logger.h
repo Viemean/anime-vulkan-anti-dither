@@ -287,7 +287,11 @@ namespace game_logger {
         g_detected_process.find("TOF") != std::string::npos ||
         // Arknights: Endfield (Unity / Vulkan)
         g_detected_process.find("Endfield") != std::string::npos ||
-        g_detected_process.find("endfield") != std::string::npos) {
+        g_detected_process.find("endfield") != std::string::npos ||
+        // Girls' Frontline 2: Exilium (Unity / DXVK)
+        g_detected_process.find("GF2_Exilium") != std::string::npos ||
+        g_detected_process.find("GF2") != std::string::npos ||
+        g_detected_process.find("Exilium") != std::string::npos) {
       auto_detect_enabled = true;
     }
 
@@ -401,6 +405,13 @@ namespace game_logger {
     return g_detected_process.find("Endfield") != std::string::npos ||
            g_detected_process.find("endfield") != std::string::npos ||
            g_detected_process.find("zmd") != std::string::npos;
+  }
+
+  inline bool is_gf2() {
+    init_config();
+    return g_detected_process.find("GF2_Exilium") != std::string::npos ||
+           g_detected_process.find("GF2") != std::string::npos ||
+           g_detected_process.find("Exilium") != std::string::npos;
   }
 
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {

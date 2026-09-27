@@ -99,5 +99,10 @@ zmd_anti_dither_test = executable('zmd_anti_dither_test',
 
 test('zmd_anti_dither_test', zmd_anti_dither_test)
 
+gf2_anti_dither_test = executable('gf2_anti_dither_test',
+  'test/test_gf2_anti_dither.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
 
-
+test('gf2_anti_dither_test', gf2_anti_dither_test)

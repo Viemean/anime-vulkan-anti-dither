@@ -9,14 +9,21 @@ INSTALLED_LIB="${TARGET_DIR}/libwuwa_antidither_layer.so"
 INSTALLED_JSON="${TARGET_DIR}/VkLayer_WUWA_antidither.json"
 
 LIB_SRC=""
-for path in \
-    "${SCRIPT_DIR}/build/libwuwa_antidither_layer.so" \
-    "${SCRIPT_DIR}/build-x86_64/libwuwa_antidither_layer.so" \
-    "${SCRIPT_DIR}/dist/libwuwa_antidither_layer.so" \
-    "${SCRIPT_DIR}/libwuwa_antidither_layer.so"; do
+CANDIDATES=(
+    "${SCRIPT_DIR}/build-x86_64/libwuwa_antidither_layer.so"
+    "${SCRIPT_DIR}/build/libwuwa_antidither_layer.so"
+    "${SCRIPT_DIR}/dist/libwuwa_antidither_layer.so"
+    "${SCRIPT_DIR}/libwuwa_antidither_layer.so"
+)
+
+NEWEST_TIME=0
+for path in "${CANDIDATES[@]}"; do
     if [[ -f "${path}" ]]; then
-        LIB_SRC="${path}"
-        break
+        MOD_TIME=$(stat -c %Y "${path}" 2>/dev/null || stat -f %m "${path}" 2>/dev/null || echo 0)
+        if (( MOD_TIME > NEWEST_TIME )); then
+            NEWEST_TIME="${MOD_TIME}"
+            LIB_SRC="${path}"
+        fi
     fi
 done
 
