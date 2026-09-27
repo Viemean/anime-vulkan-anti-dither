@@ -188,12 +188,35 @@ namespace azur_promilia_layer {
       }
     }
 
-    // 4. 双重保障: 消除由散斑噪声控制的丢弃指令，保留常规材质镂空
+    // 4. 双重保障: 收集分支与丢弃结构并安全中和 (对 OpKill 执行分支重定向保持 Terminator，对 OpDemote 置 NOP)
+    struct BranchInfo {
+      size_t offset;
+      uint32_t cond;
+      uint32_t true_label;
+      uint32_t false_label;
+    };
+    std::vector<BranchInfo> branch_insts;
     std::unordered_map<uint32_t, uint32_t> label_to_cond;
+    std::unordered_set<uint32_t> kill_labels;
+
+    struct DemoteInfo {
+      size_t offset;
+      uint16_t length;
+      uint32_t cond;
+    };
+    std::vector<DemoteInfo> demote_insts;
+
     for (const auto& inst : instructions) {
       const uint32_t* p = &spirv_code[inst.offset];
       if (inst.op == 250 /* OpBranchConditional */ && inst.len >= 4) {
+        BranchInfo bi;
+        bi.offset = inst.offset;
+        bi.cond = p[1];
+        bi.true_label = p[2];
+        bi.false_label = p[3];
+        branch_insts.push_back(bi);
         label_to_cond[p[2]] = p[1];
+        label_to_cond[p[3]] = p[1];
       }
     }
 
@@ -202,21 +225,52 @@ namespace azur_promilia_layer {
       uint32_t* p = &spirv_code[inst.offset];
       if (inst.op == 248 /* OpLabel */ && inst.len >= 2) {
         cur_label = p[1];
-      } else if (is_discard_opcode(inst.op)) {
+      } else if (inst.op == SPV_OP_KILL || inst.op == SPV_OP_TERMINATE_INVOCATION) {
+        kill_labels.insert(cur_label);
+      } else if (inst.op == SPV_OP_DEMOTE_TO_HELPER_INVOCATION) {
         auto it = label_to_cond.find(cur_label);
-        bool is_dither_discard = false;
-        if (it != label_to_cond.end() && dither_cond_ids.count(it->second)) {
-          is_dither_discard = true;
-        }
+        uint32_t cond = (it != label_to_cond.end()) ? it->second : 0;
+        demote_insts.push_back({inst.offset, inst.len, cond});
+      }
+    }
 
-        if (is_dither_discard) {
-          for (uint16_t k = 0; k < inst.len; ++k) {
-            p[k] = SPV_OP_NOP;
-          }
+    // 1. 条件分支重定向: 跳过 Dither 对应的 OpKill 基本块
+    for (const auto& br : branch_insts) {
+      bool true_has_kill = kill_labels.count(br.true_label);
+      bool false_has_kill = kill_labels.count(br.false_label);
+      if (!true_has_kill && !false_has_kill) continue;
+
+      bool is_dither = dither_cond_ids.count(br.cond) > 0;
+
+      if (true_has_kill) {
+        if (is_dither) {
+          spirv_code[br.offset + 2] = br.false_label;
           dither_nop_count++;
         } else {
           preserved_cutout_count++;
         }
+      }
+
+      if (false_has_kill) {
+        if (is_dither) {
+          spirv_code[br.offset + 3] = br.true_label;
+          dither_nop_count++;
+        } else {
+          preserved_cutout_count++;
+        }
+      }
+    }
+
+    // 2. 非 Terminator 类型的 Demote 指令定向置 NOP
+    for (const auto& dm : demote_insts) {
+      bool is_dither = dither_cond_ids.count(dm.cond) > 0;
+      if (is_dither) {
+        for (uint16_t k = 0; k < dm.length; ++k) {
+          spirv_code[dm.offset + k] = SPV_OP_NOP;
+        }
+        dither_nop_count++;
+      } else {
+        preserved_cutout_count++;
       }
     }
 

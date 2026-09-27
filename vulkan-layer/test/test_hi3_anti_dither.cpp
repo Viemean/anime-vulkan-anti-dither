@@ -93,15 +93,23 @@ void test_hi3_bayer_dither_kill_neutralized() {
 
   hi3_dxvk::process_spirv_anti_dither(spv.data(), spv.size());
 
-  bool found_kill = false;
-  bool found_nop = false;
-  for (uint32_t w : spv) {
-    if ((w & 0xFFFF) == hi3_dxvk::SPV_OP_KILL) found_kill = true;
-    if ((w & 0xFFFF) == hi3_dxvk::SPV_OP_NOP) found_nop = true;
+  // 验证 OpBranchConditional 的 true_label 是否从 %30 被重定向到了 %40 (绕过 OpKill 块，CFG 保持合法)
+  bool branch_redirected = false;
+  for (size_t i = 5; i < spv.size(); ) {
+    uint32_t w = spv[i];
+    uint16_t op = w & 0xFFFF;
+    uint16_t len = (w >> 16) & 0xFFFF;
+    if (len == 0 || (i + len) > spv.size()) break;
+    if (op == 250 && len >= 4) {
+      if (spv[i + 1] == 70 && spv[i + 2] == 40 && spv[i + 3] == 40) {
+        branch_redirected = true;
+      }
+    }
+    i += len;
   }
 
-  if (found_kill || !found_nop) {
-    std::cerr << "FAILED: HI3 character dither OpKill was not converted to OpNop!\n";
+  if (!branch_redirected) {
+    std::cerr << "FAILED: HI3 character dither branch was not safely redirected to merge label!\n";
     std::abort();
   }
 

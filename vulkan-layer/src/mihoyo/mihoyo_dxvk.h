@@ -180,10 +180,24 @@ namespace mihoyo_dxvk {
       return false;
     };
 
-    // 阶段 3: 将依赖 17.0f 的 discard/demote 指令替换为 OpNop
+    // 阶段 3: 收集分支与丢弃结构并安全中和 (对 OpKill 执行分支重定向保持 Terminator，对 OpDemote 置 NOP)
+    struct BranchInfo {
+      size_t offset;
+      uint32_t cond;
+      uint32_t true_label;
+      uint32_t false_label;
+    };
+    std::vector<BranchInfo> branch_insts;
+    std::vector<uint8_t> label_has_kill(bound, 0);
+
+    struct DemoteInfo {
+      size_t offset;
+      uint16_t length;
+      uint32_t cond;
+    };
+    std::vector<DemoteInfo> demote_insts;
+
     uint32_t current_label = 0;
-    uint32_t dither_nops = 0;
-    uint32_t preserved = 0;
     size_t i = 5;
 
     while (i < word_count) {
@@ -194,27 +208,67 @@ namespace mihoyo_dxvk {
 
       if (opcode == 248 /* OpLabel */ && length >= 2) {
         current_label = spirv_code[i + 1];
-      } else if (is_discard_opcode(opcode)) {
-        uint32_t cond = (current_label < bound) ? cond_for_label[current_label] : 0;
-        bool should_nop = false;
-
-        if (is_force_mode) {
-          should_nop = true;
-        } else if (cond > 0 && is_bayer_dependent(cond)) {
-          should_nop = true;
+      } else if (opcode == 250 /* OpBranchConditional */ && length >= 4) {
+        BranchInfo bi;
+        bi.offset = i;
+        bi.cond = spirv_code[i + 1];
+        bi.true_label = spirv_code[i + 2];
+        bi.false_label = spirv_code[i + 3];
+        branch_insts.push_back(bi);
+      } else if (opcode == SPV_OP_KILL || opcode == SPV_OP_TERMINATE_INVOCATION) {
+        if (current_label < bound) {
+          label_has_kill[current_label] = 1;
         }
+      } else if (opcode == SPV_OP_DEMOTE_TO_HELPER_INVOCATION) {
+        uint32_t cond = (current_label < bound) ? cond_for_label[current_label] : 0;
+        demote_insts.push_back({i, length, cond});
+      }
 
-        if (should_nop) {
-          for (uint16_t k = 0; k < length && (i + k) < word_count; ++k) {
-            spirv_code[i + k] = (1 << 16) | SPV_OP_NOP;
-          }
+      i += length;
+    }
+
+    uint32_t dither_nops = 0;
+    uint32_t preserved = 0;
+
+    // 1. 条件分支重定向: 跳过 Dither 对应的 OpKill 基本块，保持基本块 Terminator 完整
+    for (const auto& br : branch_insts) {
+      bool true_has_kill = (br.true_label < bound && label_has_kill[br.true_label]);
+      bool false_has_kill = (br.false_label < bound && label_has_kill[br.false_label]);
+      if (!true_has_kill && !false_has_kill) continue;
+
+      uint32_t cond = br.cond;
+      bool is_dither = (is_force_mode || (cond > 0 && is_bayer_dependent(cond)));
+
+      if (true_has_kill) {
+        if (is_dither) {
+          spirv_code[br.offset + 2] = br.false_label;
           dither_nops++;
         } else {
           preserved++;
         }
       }
 
-      i += length;
+      if (false_has_kill) {
+        if (is_dither) {
+          spirv_code[br.offset + 3] = br.true_label;
+          dither_nops++;
+        } else {
+          preserved++;
+        }
+      }
+    }
+
+    // 2. 非 Terminator 类型的 Demote 指令定向置 NOP
+    for (const auto& dm : demote_insts) {
+      bool is_dither = (is_force_mode || (dm.cond > 0 && is_bayer_dependent(dm.cond)));
+      if (is_dither) {
+        for (uint16_t k = 0; k < dm.length && (dm.offset + k) < word_count; ++k) {
+          spirv_code[dm.offset + k] = (1 << 16) | SPV_OP_NOP;
+        }
+        dither_nops++;
+      } else {
+        preserved++;
+      }
     }
 
     if (dither_nops > 0 || preserved > 0) {
