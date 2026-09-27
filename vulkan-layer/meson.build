@@ -106,3 +106,11 @@ gf2_anti_dither_test = executable('gf2_anti_dither_test',
 )
 
 test('gf2_anti_dither_test', gf2_anti_dither_test)
+
+tof_anti_dither_test = executable('tof_anti_dither_test',
+  'test/test_tof_anti_dither.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('tof_anti_dither_test', tof_anti_dither_test)

@@ -10,6 +10,7 @@
 #include "HI3rd/hi3_anti_dither.h"
 #include "zmd/zmd_anti_dither.h"
 #include "gf2/gf2_anti_dither.h"
+#include "tof/tof_anti_dither.h"
 #include "../addon/nte/memory_patcher.h"
 
 #include <mutex>
@@ -48,6 +49,8 @@ namespace {
       zmd_layer::process_spirv_anti_dither(code, word_count);
     } else if (game_logger::is_gf2()) {
       gf2_layer::process_spirv_anti_dither(code, word_count);
+    } else if (game_logger::is_tof()) {
+      tof_layer::process_spirv_anti_dither(code, word_count);
     }
   }
 
@@ -180,7 +183,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
         patched_codes[i][s].assign(mod_info->pCode, mod_info->pCode + word_count);
 
         if (stage.stage == VK_SHADER_STAGE_FRAGMENT_BIT ||
-            ((game_logger::is_nte() || game_logger::is_hsr() || game_logger::is_genshin()) && stage.stage == VK_SHADER_STAGE_VERTEX_BIT)) {
+            ((game_logger::is_nte() || game_logger::is_hsr() || game_logger::is_genshin() || game_logger::is_tof()) && stage.stage == VK_SHADER_STAGE_VERTEX_BIT)) {
           dispatch_anti_dither_process(patched_codes[i][s].data(), patched_codes[i][s].size());
         }
 

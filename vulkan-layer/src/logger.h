@@ -282,9 +282,11 @@ namespace game_logger {
         g_detected_process.find("NarakaBladepoint") != std::string::npos ||
         g_detected_process.find("Naraka") != std::string::npos ||
         g_detected_process.find("InfinityNikki") != std::string::npos ||
-        g_detected_process.find("ProjectMugen") != std::string::npos ||
+        // Tower of Fantasy (Hotta / UE4)
         g_detected_process.find("QRSL") != std::string::npos ||
+        g_detected_process.find("Hotta") != std::string::npos ||
         g_detected_process.find("TOF") != std::string::npos ||
+        g_detected_process.find("TowerOfFantasy") != std::string::npos ||
         // Arknights: Endfield (Unity / Vulkan)
         g_detected_process.find("Endfield") != std::string::npos ||
         g_detected_process.find("endfield") != std::string::npos ||
@@ -412,6 +414,14 @@ namespace game_logger {
     return g_detected_process.find("GF2_Exilium") != std::string::npos ||
            g_detected_process.find("GF2") != std::string::npos ||
            g_detected_process.find("Exilium") != std::string::npos;
+  }
+
+  inline bool is_tof() {
+    init_config();
+    return g_detected_process.find("QRSL") != std::string::npos ||
+           g_detected_process.find("Hotta") != std::string::npos ||
+           g_detected_process.find("TOF") != std::string::npos ||
+           g_detected_process.find("TowerOfFantasy") != std::string::npos;
   }
 
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {
