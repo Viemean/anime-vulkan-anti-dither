@@ -41,6 +41,9 @@ jobs:
       - name: Build and package (x86_64 & aarch64/arm64)
         run: |
           chmod +x package.sh vulkan-layer/build.sh vulkan-layer/install.sh vulkan-layer/uninstall.sh
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            export VERSION="${GITHUB_REF_NAME#v}"
+          fi
           ./package.sh all
 
       - name: Upload build artifacts
@@ -49,16 +52,14 @@ jobs:
           name: vulkan-anti-dither-packages
           path: dist/packages/*
 
-      - name: Get short commit hash
-        id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Create or update GitHub Release
-        if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || startsWith(github.ref, 'refs/tags/')
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: "Release 1.0.0+${{ steps.vars.outputs.sha_short }}"
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
           files: dist/packages/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

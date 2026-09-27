@@ -6,9 +6,14 @@ ROOT_DIR="${SCRIPT_DIR}"
 VULKAN_DIR="${ROOT_DIR}/vulkan-layer"
 OUT_DIR="${ROOT_DIR}/dist/packages"
 
-# 1. 解析版本号 (格式: 1.0.0+最新提交短哈希)
-GIT_HASH=$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-VERSION="${VERSION:-1.0.0+${GIT_HASH}}"
+# 1. 解析版本号 (优先读取环境变量，其次匹配精确 tag，否则默认 1.0.0)
+if [[ -z "${VERSION:-}" ]]; then
+    if GIT_TAG=$(git -C "${ROOT_DIR}" describe --tags --exact-match 2>/dev/null); then
+        VERSION="${GIT_TAG#v}"
+    else
+        VERSION="1.0.0"
+    fi
+fi
 
 HOST_ARCH="$(uname -m)"
 case "${HOST_ARCH}" in
