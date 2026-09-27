@@ -207,10 +207,185 @@ void test_tof_real_dump_benchmarks() {
   std::cout << "PASSED\n";
 }
 
+// 用例 4: 幻塔 DXVK (DirectX 11) 角色点阵虚化消除 (OpKill + Bayer 向量)
+void test_tof_dxvk_character_dither_neutralized() {
+  std::cout << "[Test TOF 4] DXVK Character Bayer Dither (OpKill neutralized)... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  tof_dxvk::FloatUint f_bayer1, f_bayer2, f_bayer3, f_bayer4;
+  f_bayer1.f = 0.0f;
+  f_bayer2.f = 0.33333334f;
+  f_bayer3.f = 0.6666667f;
+  f_bayer4.f = 0.8888889f;
+
+  std::vector<uint32_t> spv = {
+    tof_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    0, // DXVK Generator (not 30017)
+    100, // Bound
+    0,
+    // OpName %10 "cb0" (DXVK signature)
+    make_op(3, tof_dxvk::SPV_OP_NAME), 10, 0x00306263,
+    // OpDecorate %12 BuiltIn FragCoord
+    make_op(4, tof_dxvk::SPV_OP_DECORATE), 12, tof_dxvk::SPV_DECORATION_BUILTIN, tof_dxvk::SPV_BUILTIN_FRAG_COORD,
+    // Bayer fractions
+    make_op(4, tof_dxvk::SPV_OP_CONSTANT), 1, 51, f_bayer1.u,
+    make_op(4, tof_dxvk::SPV_OP_CONSTANT), 1, 52, f_bayer2.u,
+    make_op(4, tof_dxvk::SPV_OP_CONSTANT), 1, 53, f_bayer3.u,
+    make_op(4, tof_dxvk::SPV_OP_CONSTANT), 1, 54, f_bayer4.u,
+    // OpConstantComposite %55 (v4float packed Bayer)
+    make_op(6, tof_dxvk::SPV_OP_CONSTANT_COMPOSITE), 2, 55, 51, 52, 53, 54,
+    // OpVariable ptr_Input %12
+    make_op(4, tof_dxvk::SPV_OP_VARIABLE), 1, 12, 1,
+    // OpFunction
+    make_op(5, tof_dxvk::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 20,
+    // OpLoad %60 %12 (FragCoord)
+    make_op(4, tof_dxvk::SPV_OP_LOAD), 1, 60, 12,
+    // OpCompositeExtract %61 %55 1 (Extract scalar Bayer from composite)
+    make_op(5, tof_dxvk::SPV_OP_COMPOSITE_EXTRACT), 1, 61, 55, 1,
+    // OpFMul %70 %60 %61
+    make_op(5, 133), 1, 70, 60, 61,
+    // OpFOrdLessThan %80 %70 %61
+    make_op(5, 184), 6, 80, 70, 61,
+    // OpBranchConditional %80 %30 %40
+    make_op(4, tof_dxvk::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
+    // OpLabel %30
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 30,
+    // OpKill (应当被 NOP)
+    make_op(1, tof_dxvk::SPV_OP_KILL),
+    // OpLabel %40
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, tof_dxvk::SPV_OP_FUNCTION_END)
+  };
+
+  tof_dxvk::process_spirv_anti_dither(spv.data(), spv.size());
+  bool found_nop = false;
+  for (uint32_t w : spv) {
+    if ((w & 0xFFFF) == tof_dxvk::SPV_OP_NOP) found_nop = true;
+  }
+  if (!found_nop) {
+    std::cerr << "FAILED: TOF DXVK character Bayer dither was not neutralized!\n";
+    std::abort();
+  }
+  std::cout << "PASSED\n";
+}
+
+// 用例 5: 幻塔 DXVK 大世界植被/树叶 Alpha Cutout 100% 保护 (OpKill 绝对保留)
+void test_tof_dxvk_tree_cutout_preserved() {
+  std::cout << "[Test TOF 5] DXVK Tree Foliage Alpha Cutout with Texture Sample (Preserved 100%)... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  tof_dxvk::FloatUint f_cutoff;
+  f_cutoff.f = 0.33333334f;
+
+  std::vector<uint32_t> spv = {
+    tof_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    0, // DXVK Generator
+    100,
+    0,
+    // OpName %10 "cb0"
+    make_op(3, tof_dxvk::SPV_OP_NAME), 10, 0x00306263,
+    // OpConstant %50
+    make_op(4, tof_dxvk::SPV_OP_CONSTANT), 1, 50, f_cutoff.u,
+    // OpFunction
+    make_op(5, tof_dxvk::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 10,
+    // OpImageSampleImplicitLod: type 4, res 15, sampled_img 2, coord 3
+    make_op(5, 87), 4, 15, 2, 3,
+    // OpFOrdLessThan %16 %15 %50 (Alpha Cutout condition)
+    make_op(5, 184), 6, 16, 15, 50,
+    // OpBranchConditional %16 %20 %30
+    make_op(4, tof_dxvk::SPV_OP_BRANCH_CONDITIONAL), 16, 20, 30,
+    // OpLabel %20
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 20,
+    // OpKill (应当保留，绝不能被 NOP)
+    make_op(1, tof_dxvk::SPV_OP_KILL),
+    // OpLabel %30
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 30,
+    make_op(1, 253),
+    make_op(1, tof_dxvk::SPV_OP_FUNCTION_END)
+  };
+
+  tof_dxvk::process_spirv_anti_dither(spv.data(), spv.size());
+  bool found_kill = false;
+  for (uint32_t w : spv) {
+    if ((w & 0xFFFF) == tof_dxvk::SPV_OP_KILL) found_kill = true;
+  }
+  if (!found_kill) {
+    std::cerr << "FAILED: TOF DXVK tree foliage alpha cutout was incorrectly neutralized!\n";
+    std::abort();
+  }
+  std::cout << "PASSED\n";
+}
+
+// 用例 6: 统一入口双后端分发路由测试
+void test_tof_layer_dispatch() {
+  std::cout << "[Test TOF 6] Unified tof_layer::process_spirv_anti_dither dispatching... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  tof_dxvk::FloatUint f_noise;
+  f_noise.f = 1000.0f;
+
+  // 构造带有 Fragment Entry Point 的 DXVK 着色器
+  std::vector<uint32_t> dxvk_spv = {
+    tof_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    0, // DXVK
+    100,
+    0,
+    // OpEntryPoint Fragment %1 "main"
+    make_op(4, 15), 4, 1, 0x6e69616d,
+    // OpName %10 "cb0"
+    make_op(3, tof_dxvk::SPV_OP_NAME), 10, 0x00306263,
+    // OpDecorate %12 BuiltIn FragCoord
+    make_op(4, tof_dxvk::SPV_OP_DECORATE), 12, tof_dxvk::SPV_DECORATION_BUILTIN, tof_dxvk::SPV_BUILTIN_FRAG_COORD,
+    // OpConstant %50 (1000.0f noise)
+    make_op(4, tof_dxvk::SPV_OP_CONSTANT), 1, 50, f_noise.u,
+    make_op(4, tof_dxvk::SPV_OP_VARIABLE), 1, 12, 1,
+    make_op(5, tof_dxvk::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 20,
+    make_op(4, tof_dxvk::SPV_OP_LOAD), 1, 60, 12,
+    make_op(5, 133), 1, 70, 60, 50,
+    make_op(5, 184), 6, 80, 70, 50,
+    make_op(4, tof_dxvk::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 30,
+    make_op(1, tof_dxvk::SPV_OP_KILL),
+    make_op(2, tof_dxvk::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, tof_dxvk::SPV_OP_FUNCTION_END)
+  };
+
+  tof_layer::process_spirv_anti_dither(dxvk_spv.data(), dxvk_spv.size());
+  bool found_nop = false;
+  for (uint32_t w : dxvk_spv) {
+    if ((w & 0xFFFF) == tof_dxvk::SPV_OP_NOP) found_nop = true;
+  }
+  if (!found_nop) {
+    std::cerr << "FAILED: TOF layer unified dispatch failed to process DXVK shader!\n";
+    std::abort();
+  }
+  std::cout << "PASSED\n";
+}
+
 int main() {
   test_tof_character_noise_dither_neutralized();
   test_tof_tree_foliage_alpha_cutout_preserved();
   test_tof_real_dump_benchmarks();
+  test_tof_dxvk_character_dither_neutralized();
+  test_tof_dxvk_tree_cutout_preserved();
+  test_tof_layer_dispatch();
   std::cout << "All TOF anti-dither unit tests passed successfully!\n";
   return 0;
 }
