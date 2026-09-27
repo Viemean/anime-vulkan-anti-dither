@@ -385,6 +385,14 @@ namespace game_logger {
            g_detected_process.find("zzz") != std::string::npos;
   }
 
+  inline bool is_hi3() {
+    init_config();
+    return g_detected_process.find("BH3") != std::string::npos ||
+           g_detected_process.find("Honkai Impact 3") != std::string::npos ||
+           g_detected_process.find("HonkaiImpact3") != std::string::npos ||
+           g_detected_process.find("HI3") != std::string::npos;
+  }
+
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {
     uint32_t hash = 2166136261u;
     for (size_t i = 0; i < word_count; ++i) {

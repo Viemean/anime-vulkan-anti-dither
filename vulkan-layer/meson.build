@@ -83,3 +83,12 @@ azur_promilia_anti_dither_test = executable('azur_promilia_anti_dither_test',
 
 test('azur_promilia_anti_dither_test', azur_promilia_anti_dither_test)
 
+hi3_anti_dither_test = executable('hi3_anti_dither_test',
+  'test/test_hi3_anti_dither.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('hi3_anti_dither_test', hi3_anti_dither_test)
+
+
