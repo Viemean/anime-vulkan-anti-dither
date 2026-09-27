@@ -91,4 +91,13 @@ hi3_anti_dither_test = executable('hi3_anti_dither_test',
 
 test('hi3_anti_dither_test', hi3_anti_dither_test)
 
+zmd_anti_dither_test = executable('zmd_anti_dither_test',
+  'test/test_zmd_anti_dither.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('zmd_anti_dither_test', zmd_anti_dither_test)
+
+
 

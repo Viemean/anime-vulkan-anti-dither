@@ -284,7 +284,10 @@ namespace game_logger {
         g_detected_process.find("InfinityNikki") != std::string::npos ||
         g_detected_process.find("ProjectMugen") != std::string::npos ||
         g_detected_process.find("QRSL") != std::string::npos ||
-        g_detected_process.find("TOF") != std::string::npos) {
+        g_detected_process.find("TOF") != std::string::npos ||
+        // Arknights: Endfield (Unity / Vulkan)
+        g_detected_process.find("Endfield") != std::string::npos ||
+        g_detected_process.find("endfield") != std::string::npos) {
       auto_detect_enabled = true;
     }
 
@@ -391,6 +394,13 @@ namespace game_logger {
            g_detected_process.find("Honkai Impact 3") != std::string::npos ||
            g_detected_process.find("HonkaiImpact3") != std::string::npos ||
            g_detected_process.find("HI3") != std::string::npos;
+  }
+
+  inline bool is_zmd() {
+    init_config();
+    return g_detected_process.find("Endfield") != std::string::npos ||
+           g_detected_process.find("endfield") != std::string::npos ||
+           g_detected_process.find("zmd") != std::string::npos;
   }
 
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {
