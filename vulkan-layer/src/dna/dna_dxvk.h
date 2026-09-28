@@ -139,10 +139,12 @@ namespace dna_dxvk {
     std::vector<std::pair<uint32_t, uint32_t>> and_operands(bound, {0, 0});
     std::vector<uint8_t> is_cmp_opcode_id(bound, 0);
     std::vector<uint8_t> is_inverted_mask(bound, 0);
+    std::vector<uint8_t> is_uncoupled_cutout(bound, 0);
 
     bool has_any_frag_coord = false;
     bool has_any_sample = false;
     bool has_char_dither_feature = false;
+    bool has_lod_transition_feature = false;
     uint32_t demote_count = 0;
 
     // Pass 1: 扫描 FragCoord 与 UE PseudoRandom 常量特征标记
@@ -171,6 +173,11 @@ namespace dna_dxvk {
           uint32_t res_id = spirv_code[i + 2];
           FloatUint fu;
           fu.u = spirv_code[i + 3];
+
+          // UE4 Dithered LOD 过渡门限常数 0.001f (FAbs(LODFactor) > 0.001)
+          if (fu.f >= 0.0009999f && fu.f <= 0.0010001f) {
+            has_lod_transition_feature = true;
+          }
 
           // UE 角色相机网点虚化标志性特征常量：347.8345f、3343.2837f（剔除通用的 1000.0f）
           if ((fu.f >= 347.83f && fu.f <= 347.84f) ||
@@ -201,7 +208,14 @@ namespace dna_dxvk {
       }
     }
 
-    if (demote_count == 0 && !is_force_mode) {
+    // 保护铁律：大世界植被、树木小黄花及静态网格的跨 LOD 抖动过渡严格保留，杜绝中距离卡片化
+    if (has_lod_transition_feature && !is_force_mode) {
+      if (game_logger::g_dump_enabled && demote_count > 0) {
+        game_logger::dump_shader_bundle(orig_copy.data(), orig_copy.size(),
+                                        spirv_code, word_count,
+                                        shader_hash, 0, demote_count,
+                                        has_any_frag_coord, has_any_sample);
+      }
       return;
     }
 
@@ -260,12 +274,6 @@ namespace dna_dxvk {
               uint32_t op1 = spirv_code[i + 3];
               uint32_t op2 = spirv_code[i + 4];
               if (op1 < bound && op2 < bound) and_operands[res_id] = {op1, op2};
-            }
-            if (opcode == SPV_OP_LOGICAL_OR || opcode == SPV_OP_LOGICAL_AND || opcode == SPV_OP_LOGICAL_NOT) {
-              if (!is_dither_noise[res_id]) {
-                is_dither_noise[res_id] = 1;
-                changed = true;
-              }
             }
           }
         }
@@ -469,6 +477,16 @@ namespace dna_dxvk {
 
           if (res_id < bound && is_in_demote_slice[res_id] && op1 < bound && op2 < bound) {
             uint32_t survivor = 0;
+
+            auto check_or_and_not = [&](uint32_t a, uint32_t and_op) -> uint32_t {
+              if (and_op >= bound || def_opcode[and_op] != SPV_OP_LOGICAL_AND) return 0;
+              uint32_t a1 = and_operands[and_op].first;
+              uint32_t a2 = and_operands[and_op].second;
+              if (a1 < bound && def_opcode[a1] == SPV_OP_LOGICAL_NOT && not_operand[a1] == a) return a2;
+              if (a2 < bound && def_opcode[a2] == SPV_OP_LOGICAL_NOT && not_operand[a2] == a) return a1;
+              return 0;
+            };
+
             // 模式 1: Or(!A, And(B, A)) 或 Or(!A, And(A, B)) -> 化简为 Cutout 条件 B
             if (def_opcode[op1] == SPV_OP_LOGICAL_NOT && def_opcode[op2] == SPV_OP_LOGICAL_AND) {
               uint32_t not_src = not_operand[op1];
@@ -485,6 +503,10 @@ namespace dna_dxvk {
               if (a1 == not_src) survivor = a2;
               else if (a2 == not_src) survivor = a1;
             }
+            // 模式 3: Or(A, And(B, !A)) 或 Or(A, And(!A, B)) -> 化简为 Cutout 条件 B
+            if (survivor == 0) survivor = check_or_and_not(op1, op2);
+            // 模式 4: Or(And(B, !A), A) 或 Or(And(!A, B), A) -> 化简为 Cutout 条件 B
+            if (survivor == 0) survivor = check_or_and_not(op2, op1);
 
             if (survivor > 0 && survivor < bound) {
               spirv_code[k] = (4 << 16) | SPV_OP_COPY_OBJECT;
@@ -492,6 +514,8 @@ namespace dna_dxvk {
               for (uint16_t p = 4; p < l && (k + p) < word_count; ++p) {
                 spirv_code[k + p] = (1 << 16) | SPV_OP_NOP;
               }
+              is_uncoupled_cutout[res_id] = 1;
+              is_dither_noise[res_id] = 0;
               uncoupled_count++;
             }
           }
@@ -522,7 +546,10 @@ namespace dna_dxvk {
         if (is_force_mode) {
           should_nop = true;
         } else if (cond > 0 && cond < bound) {
-          if (is_inverted_mask[cond]) {
+          if (is_uncoupled_cutout[cond]) {
+            // 已解耦为纯 Cutout 贴图镂空：必须保留丢弃指令以执行自然镂空，严禁 NOP
+            should_nop = false;
+          } else if (is_inverted_mask[cond]) {
             // 角色近景防穿模反向消隐（Not(Alpha <= Cutoff)，裸露身体皮肤与头发）：100% 消除虚化与身体穿透！
             // 实体角色着色器执行 NOP，极小纯遮罩网格保留丢弃
             if (!has_any_sample && word_count < 1000) {

@@ -472,6 +472,59 @@ void test_dna_dxvk_character_and_foliage() {
   std::cout << "PASSED\n";
 }
 
+// 用例 8: DXVK (DirectX 11) 角色面部低视角消隐与远景替身树轮廓解耦验证
+void test_dna_dxvk_real_face_and_impostor_tree() {
+  std::cout << "[Test DNA 8] DXVK character face camera fade and impostor tree uncoupling... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  std::string dir = "/tmp/game_anti_dither/dumps/EM-Win64-Shipping";
+  auto test_dump_shader = [&](const std::string& h, uint32_t expected_before, uint32_t expected_after) {
+    std::string path = dir + "/shader_" + h + "_orig.spv";
+    if (!fs::exists(path)) return;
+    std::ifstream f(path, std::ios::binary);
+    std::vector<uint32_t> spv(fs::file_size(path) / 4);
+    f.read(reinterpret_cast<char*>(spv.data()), spv.size() * 4);
+
+    uint32_t before = 0;
+    for (size_t i = 5; i < spv.size(); ) {
+      uint32_t w = spv[i];
+      uint16_t op = w & 0xFFFF;
+      uint16_t len = w >> 16;
+      if (len == 0 || (i + len) > spv.size()) break;
+      if (dna_dxvk::is_discard_opcode(op)) before++;
+      i += len;
+    }
+
+    dna_dxvk::process_spirv(spv.data(), spv.size());
+
+    uint32_t after = 0;
+    for (size_t i = 5; i < spv.size(); ) {
+      uint32_t w = spv[i];
+      uint16_t op = w & 0xFFFF;
+      uint16_t len = w >> 16;
+      if (len == 0 || (i + len) > spv.size()) break;
+      if (dna_dxvk::is_discard_opcode(op)) after++;
+      i += len;
+    }
+
+    if (before != expected_before || after != expected_after) {
+      std::cerr << "FAILED: Shader 0x" << h << " unexpected demote counts! before="
+                << before << " (expected " << expected_before << "), after="
+                << after << " (expected " << expected_after << ")\n";
+      std::abort();
+    }
+  };
+
+  // 1. 大世界花草与树木植被：LOD 过渡绝对保护，杜绝中远距离方形卡片
+  test_dump_shader("1f7ea4ed", 2, 2);
+  test_dump_shader("03423537", 1, 1);
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   test_dna_character_dither_neutralized();
   test_dna_tree_foliage_alpha_cutout_preserved();
@@ -480,6 +533,7 @@ int main() {
   test_dna_force_all_mode();
   test_dna_inverted_mask_skin_neutralized();
   test_dna_dxvk_character_and_foliage();
+  test_dna_dxvk_real_face_and_impostor_tree();
   std::cout << "All DNA anti-dither unit tests passed successfully!\n";
   return 0;
 }
