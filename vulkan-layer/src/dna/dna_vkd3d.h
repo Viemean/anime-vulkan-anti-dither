@@ -125,6 +125,8 @@ namespace dna_vkd3d {
     std::vector<uint16_t> def_opcode(bound, 0);
     std::vector<uint32_t> not_operand(bound, 0);
     std::vector<std::pair<uint32_t, uint32_t>> and_operands(bound, {0, 0});
+    std::vector<uint8_t> is_cmp_opcode_id(bound, 0);
+    std::vector<uint8_t> is_inverted_mask(bound, 0);
 
     bool has_any_frag_coord = false;
     bool has_any_sample = false;
@@ -226,9 +228,21 @@ namespace dna_vkd3d {
           res_id = (opcode >= 19 && opcode <= 39) ? spirv_code[i + 1] : spirv_code[i + 2];
           if (res_id < bound) {
             def_opcode[res_id] = opcode;
+            if (opcode >= 180 && opcode <= 190) {
+              is_cmp_opcode_id[res_id] = 1;
+            }
             if (opcode == SPV_OP_LOGICAL_NOT && length >= 4) {
               uint32_t op1 = spirv_code[i + 3];
-              if (op1 < bound) not_operand[res_id] = op1;
+              if (op1 < bound) {
+                not_operand[res_id] = op1;
+                // 标记反向消隐：Not(Alpha <= Cutoff) 或 Not(Cmp)
+                if (is_cmp_opcode_id[op1] || depends_on_sample[op1]) {
+                  if (!is_inverted_mask[res_id]) {
+                    is_inverted_mask[res_id] = 1;
+                    changed = true;
+                  }
+                }
+              }
             } else if (opcode == SPV_OP_LOGICAL_AND && length >= 5) {
               uint32_t op1 = spirv_code[i + 3];
               uint32_t op2 = spirv_code[i + 4];
@@ -306,6 +320,10 @@ namespace dna_vkd3d {
               }
               if (depends_on_sample[op_val] && !depends_on_sample[res_id]) {
                 depends_on_sample[res_id] = 1;
+                changed = true;
+              }
+              if (is_inverted_mask[op_val] && !is_inverted_mask[res_id]) {
+                is_inverted_mask[res_id] = 1;
                 changed = true;
               }
             }
@@ -490,7 +508,10 @@ namespace dna_vkd3d {
         if (is_force_mode) {
           should_nop = true;
         } else if (cond > 0 && cond < bound) {
-          if (depends_on_sample[cond]) {
+          if (is_inverted_mask[cond]) {
+            // 角色近景防穿模反向消隐（Not(Alpha <= Cutoff)，裸露身体皮肤与头发）：100% 消除虚化与身体穿透！
+            should_nop = true;
+          } else if (depends_on_sample[cond]) {
             // 大世界植被环境 Alpha Cutout：严格保留贴图自然镂空，树叶草木绝非方块
             should_nop = false;
           } else if (is_dither_noise[cond] || depends_on_frag_coord[cond] || has_char_dither_feature) {
