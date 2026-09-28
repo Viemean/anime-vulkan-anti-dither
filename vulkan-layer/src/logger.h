@@ -33,6 +33,9 @@ namespace game_logger {
   inline std::string g_clean_process_name;
   inline std::unordered_set<uint32_t> g_exclude_hashes;
   inline std::unordered_set<uint32_t> g_force_hashes;
+  inline bool g_force_all = false;
+  inline uint32_t g_force_hash_min = 0x00000000u;
+  inline uint32_t g_force_hash_max = 0xFFFFFFFFu;
 
   inline FILE* g_log_file = nullptr;
   inline bool g_log_file_initialized = false;
@@ -276,9 +279,14 @@ namespace game_logger {
         g_detected_process.find("HT-Win64") != std::string::npos ||
         g_detected_process.find("NevernessToEverness") != std::string::npos ||
         g_detected_process.find("HT") != std::string::npos ||
+        // Duet Night Abyss / 二重螺旋 (EM / UE4)
+        g_detected_process.find("EM-Win64-Shipping") != std::string::npos ||
+        g_detected_process.find("EM-Win64") != std::string::npos ||
+        g_detected_process.find("EM") != std::string::npos ||
+        g_detected_process.find("DuetNightAbyss") != std::string::npos ||
+        g_detected_process.find("DNA") != std::string::npos ||
         // Other Anime / UE / Unity Games
         g_detected_process.find("Snowbreak") != std::string::npos ||
-        g_detected_process.find("DuetNightAbyss") != std::string::npos ||
         g_detected_process.find("NarakaBladepoint") != std::string::npos ||
         g_detected_process.find("Naraka") != std::string::npos ||
         g_detected_process.find("InfinityNikki") != std::string::npos ||
@@ -336,6 +344,18 @@ namespace game_logger {
     const char* env_force = std::getenv("ANTI_DITHER_FORCE_HASHES");
     if (env_force)
       parse_hash_list(env_force, g_force_hashes);
+
+    const char* env_force_all = std::getenv("ANTI_DITHER_FORCE_ALL");
+    if (env_force_all)
+      g_force_all = (std::strcmp(env_force_all, "1") == 0 || std::strcmp(env_force_all, "true") == 0);
+
+    const char* env_min = std::getenv("ANTI_DITHER_HASH_MIN");
+    if (env_min)
+      g_force_hash_min = static_cast<uint32_t>(std::strtoul(env_min, nullptr, 0));
+
+    const char* env_max = std::getenv("ANTI_DITHER_HASH_MAX");
+    if (env_max)
+      g_force_hash_max = static_cast<uint32_t>(std::strtoul(env_max, nullptr, 0));
   }
 
   inline bool is_log_enabled() {
@@ -422,6 +442,15 @@ namespace game_logger {
            g_detected_process.find("Hotta") != std::string::npos ||
            g_detected_process.find("TOF") != std::string::npos ||
            g_detected_process.find("TowerOfFantasy") != std::string::npos;
+  }
+
+  inline bool is_dna() {
+    init_config();
+    return g_detected_process.find("EM-Win64-Shipping") != std::string::npos ||
+           g_detected_process.find("EM-Win64") != std::string::npos ||
+           g_detected_process.find("EM") != std::string::npos ||
+           g_detected_process.find("DuetNightAbyss") != std::string::npos ||
+           g_detected_process.find("DNA") != std::string::npos;
   }
 
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {

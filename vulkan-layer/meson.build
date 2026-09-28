@@ -114,3 +114,11 @@ tof_anti_dither_test = executable('tof_anti_dither_test',
 )
 
 test('tof_anti_dither_test', tof_anti_dither_test)
+
+dna_anti_dither_test = executable('dna_anti_dither_test',
+  'test/test_dna_anti_dither.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('dna_anti_dither_test', dna_anti_dither_test)
