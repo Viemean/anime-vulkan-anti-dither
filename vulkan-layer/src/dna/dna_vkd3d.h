@@ -235,8 +235,8 @@ namespace dna_vkd3d {
               uint32_t op1 = spirv_code[i + 3];
               if (op1 < bound) {
                 not_operand[res_id] = op1;
-                // 标记反向消隐：Not(Alpha <= Cutoff) 或 Not(Cmp)
-                if (is_cmp_opcode_id[op1] || depends_on_sample[op1]) {
+                // 标记反向贴图消隐：严格限定为对贴图采样比较的取反 (Not(SampleAlpha <= Cutoff))
+                if (is_cmp_opcode_id[op1] && depends_on_sample[op1]) {
                   if (!is_inverted_mask[res_id]) {
                     is_inverted_mask[res_id] = 1;
                     changed = true;
@@ -510,7 +510,12 @@ namespace dna_vkd3d {
         } else if (cond > 0 && cond < bound) {
           if (is_inverted_mask[cond]) {
             // 角色近景防穿模反向消隐（Not(Alpha <= Cutoff)，裸露身体皮肤与头发）：100% 消除虚化与身体穿透！
-            should_nop = true;
+            // 实体角色着色器执行 NOP，极小纯遮罩网格保留丢弃
+            if (!has_any_sample && word_count < 1000) {
+              should_nop = false;
+            } else {
+              should_nop = true;
+            }
           } else if (depends_on_sample[cond]) {
             // 大世界植被环境 Alpha Cutout：严格保留贴图自然镂空，树叶草木绝非方块
             should_nop = false;

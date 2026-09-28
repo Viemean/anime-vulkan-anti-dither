@@ -323,12 +323,70 @@ static void test_dna_force_all_mode() {
   std::cout << "PASSED\n";
 }
 
+// 用例 6: 角色裸露皮肤与头发次表面散射反向消隐消除 (Inverted Mask: Not(Alpha <= Thresh))
+void test_dna_inverted_mask_skin_neutralized() {
+  std::cout << "[Test DNA 6] Character skin/hair inverted mask anti-dither (Not(Alpha <= Cutoff))... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  dna_vkd3d::FloatUint f_thresh;
+  f_thresh.f = 0.89999998f;
+
+  std::vector<uint32_t> spv = {
+    dna_vkd3d::SPV_HEADER_MAGIC,
+    0x00010300,
+    30017 << 16, // VKD3D
+    100, // Bound
+    0,
+    // OpConstant %50 (0.9f)
+    make_op(4, dna_vkd3d::SPV_OP_CONSTANT), 1, 50, f_thresh.u,
+    // OpFunction
+    make_op(5, 54), 2, 1, 0, 3,
+    make_op(2, dna_vkd3d::SPV_OP_LABEL), 10,
+    // OpImageSampleImplicitLod %15
+    make_op(5, 87), 4, 15, 2, 3,
+    // OpFOrdLessThanEqual %16 %15 %50
+    make_op(5, 186 /* OpFOrdLessThanEqual */), 6, 16, 15, 50,
+    // OpLogicalNot %17 %16 (Inverted Mask)
+    make_op(4, dna_vkd3d::SPV_OP_LOGICAL_NOT), 6, 17, 16,
+    // OpBranchConditional %17 %20 %30
+    make_op(4, dna_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 17, 20, 30,
+    // OpLabel %20
+    make_op(2, dna_vkd3d::SPV_OP_LABEL), 20,
+    // OpDemoteToHelperInvocation (应当被 100% NOP)
+    make_op(1, dna_vkd3d::SPV_OP_DEMOTE_TO_HELPER),
+    make_op(2, dna_vkd3d::SPV_OP_LABEL), 30,
+    make_op(1, 253),
+    make_op(1, 56)
+  };
+
+  dna_vkd3d::process_spirv(spv.data(), spv.size());
+
+  bool found_demote = false;
+  bool found_nop = false;
+  for (uint32_t w : spv) {
+    uint16_t op = w & 0xFFFF;
+    if (op == dna_vkd3d::SPV_OP_DEMOTE_TO_HELPER) found_demote = true;
+    if (op == dna_vkd3d::SPV_OP_NOP) found_nop = true;
+  }
+
+  if (found_demote || !found_nop) {
+    std::cerr << "FAILED: Character skin inverted mask Demote should be NOPed!\n";
+    std::abort();
+  }
+  std::cout << "PASSED\n";
+}
+
 int main() {
   test_dna_character_dither_neutralized();
   test_dna_tree_foliage_alpha_cutout_preserved();
   test_dna_real_dump_benchmarks();
   test_dna_layer_dispatch();
   test_dna_force_all_mode();
+  test_dna_inverted_mask_skin_neutralized();
   std::cout << "All DNA anti-dither unit tests passed successfully!\n";
   return 0;
 }
+
