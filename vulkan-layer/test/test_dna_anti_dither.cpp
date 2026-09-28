@@ -379,6 +379,99 @@ void test_dna_inverted_mask_skin_neutralized() {
   std::cout << "PASSED\n";
 }
 
+// 用例 7: DXVK (DirectX 11) 后端角色点阵消除与植被保护验证
+void test_dna_dxvk_character_and_foliage() {
+  std::cout << "[Test DNA 7] DXVK (DirectX 11 / OpKill) character anti-dither and foliage cutout... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  dna_dxvk::FloatUint f_noise;
+  f_noise.f = 347.8345f;
+
+  // 1. 角色 DXVK 着色器 (OpKill 应当被 NOP)
+  std::vector<uint32_t> char_spv = {
+    dna_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    16 << 16, // DXVK Generator Tool ID: 16
+    100, // Bound
+    0,
+    // OpDecorate %10 BuiltIn FragCoord
+    make_op(4, dna_dxvk::SPV_OP_DECORATE), 10, dna_dxvk::SPV_DECORATION_BUILTIN, dna_dxvk::SPV_BUILTIN_FRAG_COORD,
+    // OpConstant %50 (347.8345f)
+    make_op(4, dna_dxvk::SPV_OP_CONSTANT), 1, 50, f_noise.u,
+    make_op(4, dna_dxvk::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, 54), 2, 1, 0, 3,
+    make_op(2, dna_dxvk::SPV_OP_LABEL), 20,
+    // OpImageSampleImplicitLod %15 (角色材质贴图采样)
+    make_op(5, 87), 4, 15, 2, 3,
+    make_op(4, dna_dxvk::SPV_OP_LOAD), 1, 60, 10,
+    make_op(5, dna_dxvk::SPV_OP_FMUL), 1, 70, 60, 50,
+    make_op(5, dna_dxvk::SPV_OP_FORDERED_LESS_THAN), 6, 80, 70, 50,
+    make_op(4, dna_dxvk::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
+    make_op(2, dna_dxvk::SPV_OP_LABEL), 30,
+    make_op(1, dna_dxvk::SPV_OP_KILL), // OpKill (252)
+    make_op(2, dna_dxvk::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, 56)
+  };
+
+  // 通过统一层入口路由
+  dna_layer::process_spirv_anti_dither(char_spv.data(), char_spv.size());
+
+  bool char_has_kill = false;
+  bool char_has_nop = false;
+  for (uint32_t w : char_spv) {
+    uint16_t op = w & 0xFFFF;
+    if (op == dna_dxvk::SPV_OP_KILL) char_has_kill = true;
+    if (op == dna_dxvk::SPV_OP_NOP) char_has_nop = true;
+  }
+
+  if (char_has_kill || !char_has_nop) {
+    std::cerr << "FAILED: DXVK character OpKill should be NOPed!\n";
+    std::abort();
+  }
+
+  // 2. 植被 DXVK 着色器 (OpKill 应当保留)
+  dna_dxvk::FloatUint f_cutoff;
+  f_cutoff.f = 0.33333334f;
+
+  std::vector<uint32_t> plant_spv = {
+    dna_dxvk::SPV_HEADER_MAGIC,
+    0x00010300,
+    16 << 16, // DXVK Generator Tool ID: 16
+    100,
+    0,
+    make_op(4, dna_dxvk::SPV_OP_CONSTANT), 1, 50, f_cutoff.u,
+    make_op(5, 54), 2, 1, 0, 3,
+    make_op(2, dna_dxvk::SPV_OP_LABEL), 10,
+    make_op(5, 87), 4, 15, 2, 3,
+    make_op(5, dna_dxvk::SPV_OP_FORDERED_LESS_THAN), 6, 16, 15, 50,
+    make_op(4, dna_dxvk::SPV_OP_BRANCH_CONDITIONAL), 16, 20, 30,
+    make_op(2, dna_dxvk::SPV_OP_LABEL), 20,
+    make_op(1, dna_dxvk::SPV_OP_KILL), // OpKill
+    make_op(2, dna_dxvk::SPV_OP_LABEL), 30,
+    make_op(1, 253),
+    make_op(1, 56)
+  };
+
+  dna_layer::process_spirv_anti_dither(plant_spv.data(), plant_spv.size());
+
+  bool plant_has_kill = false;
+  for (uint32_t w : plant_spv) {
+    uint16_t op = w & 0xFFFF;
+    if (op == dna_dxvk::SPV_OP_KILL) plant_has_kill = true;
+  }
+
+  if (!plant_has_kill) {
+    std::cerr << "FAILED: DXVK foliage OpKill must be preserved!\n";
+    std::abort();
+  }
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   test_dna_character_dither_neutralized();
   test_dna_tree_foliage_alpha_cutout_preserved();
@@ -386,6 +479,7 @@ int main() {
   test_dna_layer_dispatch();
   test_dna_force_all_mode();
   test_dna_inverted_mask_skin_neutralized();
+  test_dna_dxvk_character_and_foliage();
   std::cout << "All DNA anti-dither unit tests passed successfully!\n";
   return 0;
 }
