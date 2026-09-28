@@ -122,3 +122,11 @@ dna_anti_dither_test = executable('dna_anti_dither_test',
 )
 
 test('dna_anti_dither_test', dna_anti_dither_test)
+
+star_anti_dither_test = executable('star_anti_dither_test',
+  'test/test_star_anti_dither.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('star_anti_dither_test', star_anti_dither_test)

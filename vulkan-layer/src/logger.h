@@ -301,7 +301,11 @@ namespace game_logger {
         // Girls' Frontline 2: Exilium (Unity / DXVK)
         g_detected_process.find("GF2_Exilium") != std::string::npos ||
         g_detected_process.find("GF2") != std::string::npos ||
-        g_detected_process.find("Exilium") != std::string::npos) {
+        g_detected_process.find("Exilium") != std::string::npos ||
+        // Star / 星痕共鸣 (Unity 2022.3)
+        g_detected_process.find("Star") != std::string::npos ||
+        g_detected_process.find("star") != std::string::npos ||
+        g_detected_process.find("星痕共鸣") != std::string::npos) {
       auto_detect_enabled = true;
     }
 
@@ -451,6 +455,13 @@ namespace game_logger {
            g_detected_process.find("EM") != std::string::npos ||
            g_detected_process.find("DuetNightAbyss") != std::string::npos ||
            g_detected_process.find("DNA") != std::string::npos;
+  }
+
+  inline bool is_star() {
+    init_config();
+    return g_detected_process.find("Star") != std::string::npos ||
+           g_detected_process.find("star") != std::string::npos ||
+           g_detected_process.find("星痕共鸣") != std::string::npos;
   }
 
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {

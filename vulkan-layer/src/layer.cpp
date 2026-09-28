@@ -12,6 +12,7 @@
 #include "gf2/gf2_anti_dither.h"
 #include "tof/tof_anti_dither.h"
 #include "dna/dna_anti_dither.h"
+#include "star/star_anti_dither.h"
 #include "../addon/nte/memory_patcher.h"
 
 #include <mutex>
@@ -54,6 +55,8 @@ namespace {
       tof_layer::process_spirv_anti_dither(code, word_count);
     } else if (game_logger::is_dna()) {
       dna_layer::process_spirv_anti_dither(code, word_count);
+    } else if (game_logger::is_star()) {
+      star_layer::process_spirv_anti_dither(code, word_count);
     }
   }
 
