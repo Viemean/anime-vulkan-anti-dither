@@ -44,6 +44,18 @@ elif [[ -f "${SCRIPT_DIR}/VkLayer_WUWA_antidither.json" ]]; then
         > "${INSTALLED_JSON}"
 fi
 
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/anti_dither"
+CONFIG_FILE="${CONFIG_DIR}/rules.conf"
+mkdir -p "${CONFIG_DIR}"
+
+if [[ -f "${SCRIPT_DIR}/manifest/rules.conf" ]]; then
+    if [[ -f "${CONFIG_FILE}" ]]; then
+        cp -f "${CONFIG_FILE}" "${CONFIG_FILE}.old"
+    fi
+    cp -f "${SCRIPT_DIR}/manifest/rules.conf" "${CONFIG_FILE}"
+fi
+
 echo "==> 隐式层安装完成"
 echo "  - 库文件:   ${INSTALLED_LIB}"
 echo "  - 描述文件: ${INSTALLED_JSON}"
+echo "  - 配置文件: ${CONFIG_FILE}"

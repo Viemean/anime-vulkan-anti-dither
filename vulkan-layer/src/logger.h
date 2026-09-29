@@ -31,6 +31,7 @@ namespace game_logger {
   inline bool g_log_enabled = false; // 发行版默认静默，零磁盘 I/O 开销
   inline std::string g_detected_process;
   inline std::string g_clean_process_name;
+  inline std::string g_config_targets;
   inline std::unordered_set<uint32_t> g_exclude_hashes;
   inline std::unordered_set<uint32_t> g_force_hashes;
   inline bool g_force_all = false;
@@ -227,12 +228,19 @@ namespace game_logger {
       } else if (key == "force_hashes" || key == "whitelist") {
         parse_hash_list(val.c_str(), g_force_hashes);
       } else if (key == "dump" || key == "dump_shaders") {
-        g_dump_enabled = (val == "1" || val == "true");
+        g_dump_enabled = (val == "1");
       } else if (key == "enabled" || key == "anti_dither") {
-        g_config_enabled = (val == "1" || val == "true") ? 1 : 0;
-        g_enabled = (g_config_enabled == 1);
+        g_config_enabled = (val == "1") ? 1 : ((val == "0") ? 0 : -1);
       } else if (key == "log" || key == "logging" || key == "debug" || key == "enable_log") {
-        g_log_enabled = (val == "1" || val == "true");
+        g_log_enabled = (val == "1");
+      } else if (key == "targets" || key == "custom_targets") {
+        g_config_targets = val;
+      } else if (key == "force_all") {
+        g_force_all = (val == "1");
+      } else if (key == "hash_min") {
+        g_force_hash_min = static_cast<uint32_t>(std::strtoul(val.c_str(), nullptr, 0));
+      } else if (key == "hash_max") {
+        g_force_hash_max = static_cast<uint32_t>(std::strtoul(val.c_str(), nullptr, 0));
       }
     }
   }
@@ -246,13 +254,15 @@ namespace game_logger {
     g_detected_process = get_process_name();
     get_clean_process_name();
 
-    // 1. 默认状态：依据进程名白名单进行自动检测
+    // 1. 读取静态配置文件 rules.conf
+    load_config_file();
+
+    // 2. 依据自定义匹配项及内置进程名白名单进行自动检测
     bool auto_detect_enabled = false;
     const char* custom_target = std::getenv("ANTI_DITHER_TARGETS");
-    if (!custom_target)
-      custom_target = std::getenv("WUWA_TARGETS");
+    std::string target_match = custom_target ? custom_target : g_config_targets;
 
-    if (custom_target && !g_detected_process.empty() && g_detected_process.find(custom_target) != std::string::npos) {
+    if (!target_match.empty() && !g_detected_process.empty() && g_detected_process.find(target_match) != std::string::npos) {
       auto_detect_enabled = true;
     } else if (
         // Wuthering Waves (Unreal Engine 4/5)
@@ -309,8 +319,6 @@ namespace game_logger {
       auto_detect_enabled = true;
     }
 
-    // 2. 静态配置文件 rules.conf 覆盖默认的进程名检测
-    load_config_file();
     if (g_config_enabled != -1) {
       g_enabled = (g_config_enabled == 1);
     } else {
@@ -319,27 +327,24 @@ namespace game_logger {
 
     // 3. 环境变量具备最高覆盖优先级
     const char* env_dither = std::getenv("ANTI_DITHER_ENABLED");
-    if (!env_dither)
-      env_dither = std::getenv("WUWA_ANTI_DITHER");
-
     if (env_dither) {
-      g_enabled = (std::strcmp(env_dither, "0") != 0 && std::strcmp(env_dither, "false") != 0);
+      if (std::strcmp(env_dither, "1") == 0) g_enabled = true;
+      else if (std::strcmp(env_dither, "0") == 0) g_enabled = false;
     }
 
-    // 环境变量具备最高覆盖优先级
     const char* env_dump = std::getenv("ANTI_DITHER_DUMP");
-    if (!env_dump)
-      env_dump = std::getenv("WUWA_DUMP_SHADERS");
-    if (env_dump)
-      g_dump_enabled = (std::strcmp(env_dump, "1") == 0 || std::strcmp(env_dump, "true") == 0);
+    if (env_dump) {
+      if (std::strcmp(env_dump, "1") == 0) g_dump_enabled = true;
+      else if (std::strcmp(env_dump, "0") == 0) g_dump_enabled = false;
+    }
 
     const char* env_log = std::getenv("ANTI_DITHER_LOG");
     if (!env_log)
       env_log = std::getenv("ANTI_DITHER_DEBUG");
-    if (!env_log)
-      env_log = std::getenv("WUWA_LOG");
-    if (env_log)
-      g_log_enabled = (std::strcmp(env_log, "1") == 0 || std::strcmp(env_log, "true") == 0);
+    if (env_log) {
+      if (std::strcmp(env_log, "1") == 0) g_log_enabled = true;
+      else if (std::strcmp(env_log, "0") == 0) g_log_enabled = false;
+    }
 
     const char* env_exclude = std::getenv("ANTI_DITHER_EXCLUDE_HASHES");
     if (env_exclude)
@@ -350,8 +355,10 @@ namespace game_logger {
       parse_hash_list(env_force, g_force_hashes);
 
     const char* env_force_all = std::getenv("ANTI_DITHER_FORCE_ALL");
-    if (env_force_all)
-      g_force_all = (std::strcmp(env_force_all, "1") == 0 || std::strcmp(env_force_all, "true") == 0);
+    if (env_force_all) {
+      if (std::strcmp(env_force_all, "1") == 0) g_force_all = true;
+      else if (std::strcmp(env_force_all, "0") == 0) g_force_all = false;
+    }
 
     const char* env_min = std::getenv("ANTI_DITHER_HASH_MIN");
     if (env_min)

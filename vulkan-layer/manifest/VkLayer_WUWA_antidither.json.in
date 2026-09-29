@@ -11,7 +11,7 @@
             "vkNegotiateLoaderLayerInterfaceVersion": "vkNegotiateLoaderLayerInterfaceVersion"
         },
         "disable_environment": {
-            "DISABLE_WUWA_ANTI_DITHER": "1"
+            "DISABLE_ANTI_DITHER": "1"
         }
     }
 }
