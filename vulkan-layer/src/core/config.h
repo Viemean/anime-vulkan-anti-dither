@@ -27,8 +27,6 @@ namespace game_core {
   extern bool g_fps_unlock_enabled;
   extern int g_config_fps_unlock;
   extern int32_t g_target_fps;
-  extern bool g_zmd_nomask_enabled;
-  extern int g_config_zmd_nomask;
 
   std::recursive_mutex& get_logger_mutex();
 
@@ -45,7 +43,14 @@ namespace game_core {
   bool is_fps_unlock_enabled();
   int32_t get_target_fps();
   int32_t get_effective_engine_fps();
-  bool is_zmd_nomask_enabled();
+
+  // 通用 Mod 开关查询接口 (自动支持 rules.conf 与对应环境变量大小写覆盖)
+  bool is_mod_enabled(std::string_view mod_name);
+
+  // 既有特化兼容门面 (等价映射至 is_mod_enabled)
+  inline bool is_zmd_nomask_enabled() {
+    return is_mod_enabled("zmd_nomask");
+  }
 
   // 各游戏专属状态查询 (基于 GameId 枚举比对)
   inline bool is_nte() {

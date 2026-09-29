@@ -8,6 +8,7 @@
 #include <sstream>
 #include <filesystem>
 #include <mutex>
+#include <unordered_map>
 
 namespace game_core {
 
@@ -28,8 +29,7 @@ namespace game_core {
   bool g_fps_unlock_enabled = false;
   int g_config_fps_unlock = -1;
   int32_t g_target_fps = 120;
-  bool g_zmd_nomask_enabled = false;
-  int g_config_zmd_nomask = -1;
+  static std::unordered_map<std::string, bool> g_mod_toggles;
 
   std::recursive_mutex& get_logger_mutex() {
     static std::recursive_mutex s_mutex;
@@ -133,7 +133,15 @@ namespace game_core {
           g_target_fps = (parsed_fps == 0 || parsed_fps == -1) ? 0 : ((parsed_fps < 30) ? 30 : parsed_fps);
         } catch (...) {}
       } else if (key == "zmd_nomask" || key == "zmd_no_mask" || key == "nomask") {
-        g_config_zmd_nomask = (val == "1" || val == "true") ? 1 : ((val == "0" || val == "false") ? 0 : -1);
+        g_mod_toggles["zmd_nomask"] = (val == "1" || val == "true" || val == "on");
+      } else {
+        bool is_true = (val == "1" || val == "true" || val == "yes" || val == "on");
+        bool is_false = (val == "0" || val == "false" || val == "no" || val == "off");
+        if (is_true) {
+          g_mod_toggles[key] = true;
+        } else if (is_false) {
+          g_mod_toggles[key] = false;
+        }
       }
     }
   }
@@ -235,19 +243,6 @@ namespace game_core {
       } catch (...) {}
     }
 
-    if (g_config_zmd_nomask != -1) {
-      g_zmd_nomask_enabled = (g_config_zmd_nomask == 1);
-    }
-
-    const char* env_zmd_nomask = std::getenv("zmd_nomask");
-    if (!env_zmd_nomask)
-      env_zmd_nomask = std::getenv("ZMD_NOMASK");
-    if (env_zmd_nomask) {
-      if (std::strcmp(env_zmd_nomask, "1") == 0 || ::strcasecmp(env_zmd_nomask, "true") == 0)
-        g_zmd_nomask_enabled = true;
-      else if (std::strcmp(env_zmd_nomask, "0") == 0 || ::strcasecmp(env_zmd_nomask, "false") == 0)
-        g_zmd_nomask_enabled = false;
-    }
   }
 
   bool is_active() {
@@ -280,9 +275,38 @@ namespace game_core {
     return (g_target_fps == 0) ? -1 : g_target_fps;
   }
 
-  bool is_zmd_nomask_enabled() {
+  bool is_mod_enabled(std::string_view mod_name) {
     init_config();
-    return g_zmd_nomask_enabled;
+    if (mod_name.empty())
+      return false;
+
+    std::string key(mod_name);
+
+    // 1. 环境变量优先级最高: 先查原始/小写名称 (如 zmd_nomask)
+    const char* env_val = std::getenv(key.c_str());
+    if (!env_val) {
+      // 2. 查全大写名称 (如 ZMD_NOMASK)
+      std::string upper_key = key;
+      for (char& c : upper_key) {
+        c = static_cast<char>(::toupper(static_cast<unsigned char>(c)));
+      }
+      env_val = std::getenv(upper_key.c_str());
+    }
+
+    if (env_val) {
+      if (std::strcmp(env_val, "1") == 0 || ::strcasecmp(env_val, "true") == 0 || ::strcasecmp(env_val, "on") == 0)
+        return true;
+      if (std::strcmp(env_val, "0") == 0 || ::strcasecmp(env_val, "false") == 0 || ::strcasecmp(env_val, "off") == 0)
+        return false;
+    }
+
+    // 3. 查 rules.conf 解析字典
+    auto it = g_mod_toggles.find(key);
+    if (it != g_mod_toggles.end()) {
+      return it->second;
+    }
+
+    return false;
   }
 
 } // namespace game_core

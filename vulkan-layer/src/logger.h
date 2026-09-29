@@ -29,8 +29,6 @@ namespace game_logger {
   using game_core::g_fps_unlock_enabled;
   using game_core::g_config_fps_unlock;
   using game_core::g_target_fps;
-  using game_core::g_zmd_nomask_enabled;
-  using game_core::g_config_zmd_nomask;
 
   // 基础方法映射
   using game_core::get_logger_mutex;
@@ -49,6 +47,7 @@ namespace game_logger {
   using game_core::is_fps_unlock_enabled;
   using game_core::get_target_fps;
   using game_core::get_effective_engine_fps;
+  using game_core::is_mod_enabled;
   using game_core::is_zmd_nomask_enabled;
 
   // 各游戏专属状态查询

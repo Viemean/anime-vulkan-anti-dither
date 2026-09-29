@@ -50,9 +50,44 @@ void test_all_game_profiles_matched() {
   std::cout << "PASSED\n";
 }
 
+// 验证通用 Mod 开关体系 (is_mod_enabled 与大小写环境变量全自动适配)
+void test_generic_mod_framework() {
+  std::cout << "[Test Game Registry 2] Generic Mod Toggle Framework (is_mod_enabled)... ";
+
+  // 1. 未定义时默认返回 false
+  assert(game_logger::is_mod_enabled("non_existent_custom_mod") == false);
+
+  // 2. 小写环境变量覆盖生效
+  setenv("test_custom_mod", "1", 1);
+  game_logger::g_initialized = false;
+  assert(game_logger::is_mod_enabled("test_custom_mod") == true);
+
+  // 3. 显式设为 0 时禁用
+  setenv("test_custom_mod", "0", 1);
+  game_logger::g_initialized = false;
+  assert(game_logger::is_mod_enabled("test_custom_mod") == false);
+
+  // 4. 大写环境变量自动兼容匹配 (TEST_CUSTOM_MOD -> test_custom_mod)
+  unsetenv("test_custom_mod");
+  setenv("TEST_CUSTOM_MOD", "1", 1);
+  game_logger::g_initialized = false;
+  assert(game_logger::is_mod_enabled("test_custom_mod") == true);
+
+  // 5. 既有特化门面等价性验证
+  unsetenv("TEST_CUSTOM_MOD");
+  setenv("ZMD_NOMASK", "1", 1);
+  game_logger::g_initialized = false;
+  assert(game_logger::is_zmd_nomask_enabled() == true);
+  unsetenv("ZMD_NOMASK");
+  game_logger::g_initialized = false;
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Game Registry & Profile Architecture Unit Tests ===\n";
   test_all_game_profiles_matched();
+  test_generic_mod_framework();
   std::cout << "=== All Game Registry Tests Passed Successfully ===\n";
   return 0;
 }
