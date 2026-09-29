@@ -57,11 +57,33 @@ namespace dna_vkd3d {
   }
 
   /**
-   * 二重螺旋 (Duet Night Abyss / DNA) VKD3D-Proton 反虚化核心算法
-   * 基于 SSA 数据流双向传播追踪：
-   * 1. 采集 FragCoord BuiltIn 与 UE4 PseudoRandom 噪声算法特征常量 (347.8345f, 3343.2837f, 1000.0f, 0.001f)；
-   * 2. 追踪计算图中的屏幕空间 Bayer/PseudoRandom 噪声派生流与贴图采样流；
-   * 3. 区分并消除角色透视网点虚化 (Demote/Kill)，100% 保护非角色物体 (植被 Alpha Cutout、树木、技能与环境特效)。
+   * 二重螺旋 (Duet Night Abyss / DNA) VKD3D-Proton (DirectX 12) 反虚化驱动模块
+   *
+   * 核心处理逻辑与阶段划分：
+   * 1. 指令集适配：支持 VKD3D 生成的 OpDemoteToHelperInvocation (5380) 与 OpKill (252)；
+   * 2. Pass 1: 特征常量扫描，提取 FragCoord、Bayer 噪声常数（347.8345f / 3343.2837f）；
+   * 3. Pass 2: SSA 数据流级联拓扑推导与反向消隐追踪 (is_inverted_mask)；
+   * 4. Pass 2.5: 上游算术与布尔解耦：
+   *    - 乘法/极值剥离：OpFMul / OpExtInst FMin 剥离纹理与噪声乘积；
+   *    - 复合逻辑化简：OpLogicalOr 消除 Or(Fade, And(!Fade, Cutout)) 中的噪声分支；
+   * 5. Pass 3: 下游 Discard 指令级门禁判定与分类分流。
+   *
+   * 已知物理机理与排查结论：
+   * 1. 角色衣服主通道 (字长 12,000+)：
+   *    采用 OpFMul(TextureAlpha, FragCoordNoise) 调制，通过 Pass 2.5 改写为 OpCopyObject 直通解耦。
+   * 2. 角色次表面皮肤与特殊通道 (字长 1,600 ~ 3,200 及 15,000+)：
+   *    采用 OpLogicalNot 作用于比较指令的反向消隐结构，通过 is_inverted_mask 进行追踪并在 Pass 3 消除。
+   * 3. 纯遮罩几何体通道 (Depth PrePass，字长 400 ~ 800，无贴图采样)：
+   *    向深度缓冲写入几何深度。保持其丢弃指令以正常裁剪遮罩轮廓，避免深度缓冲被透明多边形错误写入导致 BasePass 被 Early-Z 误剔除。
+   * 4. 大世界植被与远景八面体替身树木 (字长 1,300 ~ 2,100)：
+   *    - 植被与树木在 LOD 过渡距离触发引擎 LODDitherFade，条件结构为 (Cutout && !LOD_Noise) || LOD_Noise；
+   *    - 远景八面体替身树木通过几何裁切控制剪影；
+   *    - 非角色环境材质的丢弃指令必须保持原生逻辑，避免破坏远景镂空导致卡片化。
+   *
+   * 已知待解决问题：
+   * - 远景树木跨 LOD 网点抖动过渡面片化（Foliage Billboard Artifacts during Dithered LOD Crossfade）：
+   *   大世界远景树木处于 LOD 渐变过渡区间时，因 LOD 噪声与镂空裁剪存在耦合，过渡期退化为实心多边形卡片；
+   *   拉近距离进入 LOD 0 且退出过渡区间后恢复正常。
    */
   inline void process_spirv(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
@@ -127,6 +149,7 @@ namespace dna_vkd3d {
     std::vector<std::pair<uint32_t, uint32_t>> and_operands(bound, {0, 0});
     std::vector<uint8_t> is_cmp_opcode_id(bound, 0);
     std::vector<uint8_t> is_inverted_mask(bound, 0);
+    std::vector<uint8_t> is_uncoupled_cutout(bound, 0);
 
     bool has_any_frag_coord = false;
     bool has_any_sample = false;
@@ -160,7 +183,7 @@ namespace dna_vkd3d {
           FloatUint fu;
           fu.u = spirv_code[i + 3];
 
-          // UE 角色相机网点虚化标志性特征常量：347.8345f、3343.2837f（剔除通用的 1000.0f）
+          // UE 角色相机网点虚化标志性特征常量：347.8345f、3343.2837f
           if ((fu.f >= 347.83f && fu.f <= 347.84f) ||
               (fu.f >= 3343.28f && fu.f <= 3343.29f)) {
             has_char_dither_feature = true;
@@ -247,12 +270,6 @@ namespace dna_vkd3d {
               uint32_t op1 = spirv_code[i + 3];
               uint32_t op2 = spirv_code[i + 4];
               if (op1 < bound && op2 < bound) and_operands[res_id] = {op1, op2};
-            }
-            if (opcode == SPV_OP_LOGICAL_OR || opcode == SPV_OP_LOGICAL_AND || opcode == SPV_OP_LOGICAL_NOT) {
-              if (!is_dither_noise[res_id]) {
-                is_dither_noise[res_id] = 1;
-                changed = true;
-              }
             }
           }
         }
@@ -447,7 +464,7 @@ namespace dna_vkd3d {
             }
           }
         }
-        // OpLogicalOr(FadeMask, And(!FadeMask, Cutout)) 复合消隐解耦（粉碎头部穹顶网罩）
+        // OpLogicalOr(FadeMask, And(!FadeMask, Cutout)) 复合消隐解耦
         else if (op == SPV_OP_LOGICAL_OR && l >= 5) {
           uint32_t res_id = spirv_code[k + 2];
           uint32_t op1 = spirv_code[k + 3];
@@ -455,6 +472,16 @@ namespace dna_vkd3d {
 
           if (res_id < bound && is_in_demote_slice[res_id] && op1 < bound && op2 < bound) {
             uint32_t survivor = 0;
+
+            auto check_or_and_not = [&](uint32_t a, uint32_t and_op) -> uint32_t {
+              if (and_op >= bound || def_opcode[and_op] != SPV_OP_LOGICAL_AND) return 0;
+              uint32_t a1 = and_operands[and_op].first;
+              uint32_t a2 = and_operands[and_op].second;
+              if (a1 < bound && def_opcode[a1] == SPV_OP_LOGICAL_NOT && not_operand[a1] == a) return a;
+              if (a2 < bound && def_opcode[a2] == SPV_OP_LOGICAL_NOT && not_operand[a2] == a) return a;
+              return 0;
+            };
+
             // 模式 1: Or(!A, And(B, A)) 或 Or(!A, And(A, B)) -> 化简为 Cutout 条件 B
             if (def_opcode[op1] == SPV_OP_LOGICAL_NOT && def_opcode[op2] == SPV_OP_LOGICAL_AND) {
               uint32_t not_src = not_operand[op1];
@@ -471,6 +498,10 @@ namespace dna_vkd3d {
               if (a1 == not_src) survivor = a2;
               else if (a2 == not_src) survivor = a1;
             }
+            // 模式 3: Or(A, And(B, !A)) 或 Or(A, And(!A, B)) -> 化简为 Cutout 条件 A（剥离 DitherNoise B）
+            if (survivor == 0) survivor = check_or_and_not(op1, op2);
+            // 模式 4: Or(And(B, !A), A) 或 Or(And(!A, B), A) -> 化简为 Cutout 条件 A（剥离 DitherNoise B）
+            if (survivor == 0) survivor = check_or_and_not(op2, op1);
 
             if (survivor > 0 && survivor < bound) {
               spirv_code[k] = (4 << 16) | SPV_OP_COPY_OBJECT;
@@ -478,6 +509,8 @@ namespace dna_vkd3d {
               for (uint16_t p = 4; p < l && (k + p) < word_count; ++p) {
                 spirv_code[k + p] = (1 << 16) | SPV_OP_NOP;
               }
+              is_uncoupled_cutout[res_id] = 1;
+              is_dither_noise[res_id] = 0;
               uncoupled_count++;
             }
           }
@@ -486,7 +519,7 @@ namespace dna_vkd3d {
       }
     }
 
-    // Pass 3: 下游 Demote 指令级精准定界（消隐 NOP vs 镂空保护）
+    // Pass 3: 下游 Demote/Kill 指令级精准定界
     size_t i = 5;
     uint32_t current_label = 0;
     uint32_t noped_count = 0;
@@ -508,26 +541,28 @@ namespace dna_vkd3d {
         if (is_force_mode) {
           should_nop = true;
         } else if (cond > 0 && cond < bound) {
-          if (is_inverted_mask[cond]) {
-            // 角色近景防穿模反向消隐（Not(Alpha <= Cutoff)，裸露身体皮肤与头发）：100% 消除虚化与身体穿透！
-            // 实体角色着色器执行 NOP，极小纯遮罩网格保留丢弃
+          if (is_uncoupled_cutout[cond]) {
+            // 已解耦为纯 Cutout 贴图镂空：保留丢弃指令以执行自然镂空
+            should_nop = false;
+          } else if (is_inverted_mask[cond]) {
+            // 角色近景防穿模反向消隐（Not(Alpha <= Cutoff)）：实体角色消除虚化，纯遮罩网格保留丢弃
             if (!has_any_sample && word_count < 1000) {
               should_nop = false;
             } else {
               should_nop = true;
             }
           } else if (depends_on_sample[cond]) {
-            // 大世界植被环境 Alpha Cutout：严格保留贴图自然镂空，树叶草木绝非方块
+            // 大世界植被环境 Alpha Cutout：保留贴图自然镂空
             should_nop = false;
           } else if (is_dither_noise[cond] || depends_on_frag_coord[cond] || has_char_dither_feature) {
-            // 纯遮罩几何体网格（无贴图采样且字长极小）：保持丢弃，防止反向画出浮空遮罩实体
+            // 纯遮罩几何体网格（无贴图采样且字长极小）：保持丢弃
             if (!has_any_sample && word_count < 1000) {
               should_nop = false;
             } else {
               should_nop = true;
             }
           } else {
-            // 保守策略：环境物体的几何裁剪保持保留
+            // 环境物体的几何裁剪保持保留
             should_nop = false;
           }
         } else if (has_char_dither_feature) {
