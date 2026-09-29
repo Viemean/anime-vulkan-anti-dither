@@ -9,6 +9,7 @@
 #include "zzz/zzz_anti_dither.h"
 #include "HI3rd/hi3_anti_dither.h"
 #include "zmd/zmd_anti_dither.h"
+#include "zmd/zmd_mod.h"
 #include "gf2/gf2_anti_dither.h"
 #include "tof/tof_anti_dither.h"
 #include "dna/dna_anti_dither.h"
@@ -22,6 +23,7 @@
 #include <cstring>
 #include <thread>
 #include <chrono>
+#include <atomic>
 
 #define LAYER_NAME "VK_LAYER_WUWA_antidither"
 #define LAYER_DESC "Wuthering Waves Camera Dither Discard Neutralizer Layer"
@@ -75,12 +77,14 @@ namespace {
     PFN_vkCreateShaderModule create_shader_module = nullptr;
     PFN_vkCreateGraphicsPipelines create_graphics_pipelines = nullptr;
     PFN_vkCreateComputePipelines create_compute_pipelines = nullptr;
+    PFN_vkCmdDrawIndexed cmd_draw_indexed = nullptr;
   };
 
   std::mutex g_lock;
   std::unordered_map<void*, InstanceData> g_instance_dispatch;
   std::unordered_map<void*, DeviceData> g_device_dispatch;
   std::unordered_map<VkPhysicalDevice, void*> g_phys_device_to_instance;
+  static std::atomic<PFN_vkCmdDrawIndexed> g_fast_cmd_draw_indexed{nullptr};
 
   VkLayerInstanceCreateInfo* get_instance_chain_info(const VkInstanceCreateInfo* pCreateInfo, VkLayerFunction func) {
     auto* chain_info = static_cast<const VkLayerInstanceCreateInfo*>(pCreateInfo->pNext);
@@ -276,6 +280,35 @@ static VKAPI_ATTR void VKAPI_CALL wuwa_vkDestroyDevice(
     dev_data.destroy_device(device, pAllocator);
 }
 
+static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDrawIndexed(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    indexCount,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstIndex,
+    int32_t                                     vertexOffset,
+    uint32_t                                    firstInstance) {
+
+  if (game_logger::is_zmd() && game_logger::is_zmd_nomask_enabled()) {
+    if (zmd_mod::should_skip_mask_draw(indexCount)) {
+      return;
+    }
+  }
+
+  PFN_vkCmdDrawIndexed pfn = g_fast_cmd_draw_indexed.load(std::memory_order_relaxed);
+  if (pfn) {
+    pfn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(g_lock);
+  if (!g_device_dispatch.empty()) {
+    auto pfn_fallback = g_device_dispatch.begin()->second.cmd_draw_indexed;
+    if (pfn_fallback) {
+      pfn_fallback(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    }
+  }
+}
+
 // Intercepted Instance Functions
 static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateDevice(
     VkPhysicalDevice                            physicalDevice,
@@ -317,6 +350,8 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateDevice(
   dev_data.create_shader_module = (PFN_vkCreateShaderModule)fpGetDeviceProcAddr(*pDevice, "vkCreateShaderModule");
   dev_data.create_graphics_pipelines = (PFN_vkCreateGraphicsPipelines)fpGetDeviceProcAddr(*pDevice, "vkCreateGraphicsPipelines");
   dev_data.create_compute_pipelines = (PFN_vkCreateComputePipelines)fpGetDeviceProcAddr(*pDevice, "vkCreateComputePipelines");
+  dev_data.cmd_draw_indexed = (PFN_vkCmdDrawIndexed)fpGetDeviceProcAddr(*pDevice, "vkCmdDrawIndexed");
+  g_fast_cmd_draw_indexed.store(dev_data.cmd_draw_indexed, std::memory_order_relaxed);
 
   {
     std::lock_guard<std::mutex> lock(g_lock);
@@ -498,6 +533,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wuwa_vkGetDeviceProcAddr(
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCreateGraphicsPipelines);
   if (std::strcmp(pName, "vkCreateComputePipelines") == 0)
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCreateComputePipelines);
+  if (std::strcmp(pName, "vkCmdDrawIndexed") == 0)
+    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDrawIndexed);
 
   DeviceData dev_data;
   {
@@ -543,6 +580,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL wuwa_vkGetInstanceProcAddr(
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCreateGraphicsPipelines);
   if (std::strcmp(pName, "vkCreateComputePipelines") == 0)
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCreateComputePipelines);
+  if (std::strcmp(pName, "vkCmdDrawIndexed") == 0)
+    return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkCmdDrawIndexed);
   if (std::strcmp(pName, "vkEnumerateInstanceLayerProperties") == 0)
     return reinterpret_cast<PFN_vkVoidFunction>(wuwa_vkEnumerateInstanceLayerProperties);
   if (std::strcmp(pName, "vkEnumerateInstanceExtensionProperties") == 0)
@@ -689,5 +728,15 @@ VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateDeviceExtensionPropert
     uint32_t*                                   pPropertyCount,
     VkExtensionProperties*                      pProperties) {
   return wuwa_vkEnumerateDeviceExtensionProperties(physicalDevice, pLayerName, pPropertyCount, pProperties);
+}
+
+VK_LAYER_EXPORT VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    indexCount,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstIndex,
+    int32_t                                     vertexOffset,
+    uint32_t                                    firstInstance) {
+  wuwa_vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 

@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <strings.h>
 #include <cstdarg>
 #include <ctime>
 #include <string>
@@ -40,6 +41,8 @@ namespace game_logger {
   inline bool g_fps_unlock_enabled = false;
   inline int g_config_fps_unlock = -1; // -1: 未在配置中指定, 0: 显式禁用, 1: 显式启用
   inline int32_t g_target_fps = 120; // 默认 120 帧，低于 30 自动设置为 30
+  inline bool g_zmd_nomask_enabled = false;
+  inline int g_config_zmd_nomask = -1; // -1: 未在配置中指定, 0: 显式禁用, 1: 显式启用
 
   inline FILE* g_log_file = nullptr;
   inline bool g_log_file_initialized = false;
@@ -251,6 +254,8 @@ namespace game_logger {
           int32_t parsed_fps = std::stoi(val);
           g_target_fps = (parsed_fps == 0 || parsed_fps == -1) ? 0 : ((parsed_fps < 30) ? 30 : parsed_fps);
         } catch (...) {}
+      } else if (key == "zmd_nomask" || key == "zmd_no_mask" || key == "nomask") {
+        g_config_zmd_nomask = (val == "1" || val == "true") ? 1 : ((val == "0" || val == "false") ? 0 : -1);
       }
     }
   }
@@ -399,6 +404,25 @@ namespace game_logger {
         g_target_fps = (parsed_fps == 0 || parsed_fps == -1) ? 0 : ((parsed_fps < 30) ? 30 : parsed_fps);
       } catch (...) {}
     }
+
+    if (g_config_zmd_nomask != -1) {
+      g_zmd_nomask_enabled = (g_config_zmd_nomask == 1);
+    }
+
+    const char* env_zmd_nomask = std::getenv("zmd_nomask");
+    if (!env_zmd_nomask)
+      env_zmd_nomask = std::getenv("ZMD_NOMASK");
+    if (env_zmd_nomask) {
+      if (std::strcmp(env_zmd_nomask, "1") == 0 || ::strcasecmp(env_zmd_nomask, "true") == 0)
+        g_zmd_nomask_enabled = true;
+      else if (std::strcmp(env_zmd_nomask, "0") == 0 || ::strcasecmp(env_zmd_nomask, "false") == 0)
+        g_zmd_nomask_enabled = false;
+    }
+  }
+
+  inline bool is_zmd_nomask_enabled() {
+    init_config();
+    return g_zmd_nomask_enabled;
   }
 
   inline bool is_fps_unlock_enabled() {

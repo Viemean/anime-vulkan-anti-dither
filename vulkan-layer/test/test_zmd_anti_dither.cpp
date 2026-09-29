@@ -7,6 +7,7 @@
 #include "../src/logger.h"
 #include "../src/zmd/zmd_anti_dither.h"
 #include "../src/zmd/zmd_vulkan.h"
+#include "../src/zmd/zmd_mod.h"
 
 static inline uint32_t make_op(uint16_t length, uint16_t opcode) {
   return (static_cast<uint32_t>(length) << 16) | opcode;
@@ -311,6 +312,60 @@ void test_zmd_dxvk_alpha_cutout_preserved() {
   std::cout << "PASSED\n";
 }
 
+// 用例 7: 管理员面具 (Mask) 索引特征识别验证
+void test_zmd_nomask_index_detection() {
+  std::cout << "[Test ZMD 7] Administrator mask index count detection... ";
+
+  // 主面具 (18220d55)
+  assert(zmd_mod::should_skip_mask_draw(4524) == true);
+  assert(zmd_mod::should_skip_mask_draw(2028) == true);
+
+  // 镜架/配件 (4cd1ad3b)
+  assert(zmd_mod::should_skip_mask_draw(117) == true);
+  assert(zmd_mod::should_skip_mask_draw(69) == true);
+  assert(zmd_mod::should_skip_mask_draw(51) == true);
+
+  // 非面具网格必须全部保留 (返回 false)
+  assert(zmd_mod::should_skip_mask_draw(0) == false);
+  assert(zmd_mod::should_skip_mask_draw(100) == false);
+  assert(zmd_mod::should_skip_mask_draw(116) == false);
+  assert(zmd_mod::should_skip_mask_draw(118) == false);
+  assert(zmd_mod::should_skip_mask_draw(2027) == false);
+  assert(zmd_mod::should_skip_mask_draw(2029) == false);
+  assert(zmd_mod::should_skip_mask_draw(4523) == false);
+  assert(zmd_mod::should_skip_mask_draw(4525) == false);
+  assert(zmd_mod::should_skip_mask_draw(12000) == false);
+
+  std::cout << "PASSED\n";
+}
+
+// 用例 8: zmd_nomask 环境变量开关与覆盖逻辑验证
+void test_zmd_nomask_env_toggle() {
+  std::cout << "[Test ZMD 8] zmd_nomask environment toggle... ";
+
+  // 1. 测试显式启用 zmd_nomask=1
+  setenv("zmd_nomask", "1", 1);
+  game_logger::g_initialized = false;
+  assert(game_logger::is_zmd_nomask_enabled() == true);
+
+  // 2. 测试显式禁用 zmd_nomask=0
+  setenv("zmd_nomask", "0", 1);
+  game_logger::g_initialized = false;
+  assert(game_logger::is_zmd_nomask_enabled() == false);
+
+  // 3. 测试大写 ZMD_NOMASK=1 兼容性
+  unsetenv("zmd_nomask");
+  setenv("ZMD_NOMASK", "1", 1);
+  game_logger::g_initialized = false;
+  assert(game_logger::is_zmd_nomask_enabled() == true);
+
+  // 清理测试环境
+  unsetenv("ZMD_NOMASK");
+  game_logger::g_initialized = false;
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Arknights: Endfield (ZMD / Vulkan & DXVK) Anti-Dither Unit Tests ===\n";
   test_zmd_pipeline_stage_dispatch();
@@ -319,6 +374,8 @@ int main() {
   test_zmd_dxvk_backend_detection();
   test_zmd_dxvk_character_dither_neutralized();
   test_zmd_dxvk_alpha_cutout_preserved();
+  test_zmd_nomask_index_detection();
+  test_zmd_nomask_env_toggle();
   std::cout << "=== All ZMD Tests Passed Successfully ===\n";
   return 0;
 }
