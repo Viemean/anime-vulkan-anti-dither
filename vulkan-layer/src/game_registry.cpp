@@ -234,11 +234,10 @@ namespace game_core {
   } // namespace
 
   void init_game_profiles(std::string_view process_name) {
+    if (process_name.empty()) {
+      return;
+    }
     std::call_once(s_init_flag, [&]() {
-      if (process_name.empty()) {
-        return;
-      }
-
       for (const auto& profile : kProfiles) {
         if (!profile.process_keywords)
           continue;
@@ -260,21 +259,21 @@ namespace game_core {
   }
 
   const GameProfile* get_active_profile() {
-    if (!s_active_profile) {
+    if (!s_active_profile && !g_initialized) {
       init_config();
     }
     return s_active_profile;
   }
 
   GameId get_active_game_id() {
-    if (!s_active_profile) {
+    if (!s_active_profile && !g_initialized) {
       init_config();
     }
     return s_active_id;
   }
 
   bool is_game_active() {
-    if (!s_active_profile) {
+    if (!s_active_profile && !g_initialized) {
       init_config();
     }
     return s_active_profile != nullptr;

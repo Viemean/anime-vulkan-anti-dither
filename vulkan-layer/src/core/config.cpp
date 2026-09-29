@@ -153,7 +153,7 @@ namespace game_core {
     // 1. 读取静态配置文件 rules.conf
     load_config_file();
 
-    // 2. 依据自定义匹配项、已注册游戏画像及通用动漫游戏白名单进行自动检测
+    // 2. 依据自定义匹配项与已注册游戏画像进行自动检测
     bool auto_detect_enabled = false;
     const char* custom_target = std::getenv("ANTI_DITHER_TARGETS");
     std::string target_match = custom_target ? custom_target : g_config_targets;
@@ -161,13 +161,6 @@ namespace game_core {
     if (!target_match.empty() && !g_detected_process.empty() && g_detected_process.find(target_match) != std::string::npos) {
       auto_detect_enabled = true;
     } else if (is_game_active()) {
-      auto_detect_enabled = true;
-    } else if (
-        // 通用兜底白名单 (未单独建 Profile 的程序)
-        g_detected_process.find("Snowbreak") != std::string::npos ||
-        g_detected_process.find("NarakaBladepoint") != std::string::npos ||
-        g_detected_process.find("Naraka") != std::string::npos ||
-        g_detected_process.find("InfinityNikki") != std::string::npos) {
       auto_detect_enabled = true;
     }
 
