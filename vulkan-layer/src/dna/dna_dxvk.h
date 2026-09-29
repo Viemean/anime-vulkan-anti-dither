@@ -144,8 +144,6 @@ namespace dna_dxvk {
     bool has_any_frag_coord = false;
     bool has_any_sample = false;
     bool has_char_dither_feature = false;
-    bool has_lod_transition_feature = false;
-    uint32_t demote_count = 0;
 
     // Pass 1: 扫描 FragCoord 与 UE PseudoRandom 常量特征标记
     {
@@ -174,11 +172,6 @@ namespace dna_dxvk {
           FloatUint fu;
           fu.u = spirv_code[i + 3];
 
-          // UE4 Dithered LOD 过渡门限常数 0.001f (FAbs(LODFactor) > 0.001)
-          if (fu.f >= 0.0009999f && fu.f <= 0.0010001f) {
-            has_lod_transition_feature = true;
-          }
-
           // UE 角色相机网点虚化标志性特征常量：347.8345f、3343.2837f（剔除通用的 1000.0f）
           if ((fu.f >= 347.83f && fu.f <= 347.84f) ||
               (fu.f >= 3343.28f && fu.f <= 3343.29f)) {
@@ -200,23 +193,10 @@ namespace dna_dxvk {
               break;
             }
           }
-        } else if (is_discard_opcode(opcode)) {
-          demote_count++;
         }
 
         i += length;
       }
-    }
-
-    // 保护铁律：大世界植被、树木小黄花及静态网格的跨 LOD 抖动过渡严格保留，杜绝中距离卡片化
-    if (has_lod_transition_feature && !is_force_mode) {
-      if (game_logger::g_dump_enabled && demote_count > 0) {
-        game_logger::dump_shader_bundle(orig_copy.data(), orig_copy.size(),
-                                        spirv_code, word_count,
-                                        shader_hash, 0, demote_count,
-                                        has_any_frag_coord, has_any_sample);
-      }
-      return;
     }
 
     // Pass 2: SSA 数据流级联依赖传播
@@ -482,8 +462,8 @@ namespace dna_dxvk {
               if (and_op >= bound || def_opcode[and_op] != SPV_OP_LOGICAL_AND) return 0;
               uint32_t a1 = and_operands[and_op].first;
               uint32_t a2 = and_operands[and_op].second;
-              if (a1 < bound && def_opcode[a1] == SPV_OP_LOGICAL_NOT && not_operand[a1] == a) return a2;
-              if (a2 < bound && def_opcode[a2] == SPV_OP_LOGICAL_NOT && not_operand[a2] == a) return a1;
+              if (a1 < bound && def_opcode[a1] == SPV_OP_LOGICAL_NOT && not_operand[a1] == a) return a;
+              if (a2 < bound && def_opcode[a2] == SPV_OP_LOGICAL_NOT && not_operand[a2] == a) return a;
               return 0;
             };
 
@@ -503,9 +483,9 @@ namespace dna_dxvk {
               if (a1 == not_src) survivor = a2;
               else if (a2 == not_src) survivor = a1;
             }
-            // 模式 3: Or(A, And(B, !A)) 或 Or(A, And(!A, B)) -> 化简为 Cutout 条件 B
+            // 模式 3: Or(A, And(B, !A)) 或 Or(A, And(!A, B)) -> 化简为 Cutout 条件 A（剥离 DitherNoise B）
             if (survivor == 0) survivor = check_or_and_not(op1, op2);
-            // 模式 4: Or(And(B, !A), A) 或 Or(And(!A, B), A) -> 化简为 Cutout 条件 B
+            // 模式 4: Or(And(B, !A), A) 或 Or(And(!A, B), A) -> 化简为 Cutout 条件 A（剥离 DitherNoise B）
             if (survivor == 0) survivor = check_or_and_not(op2, op1);
 
             if (survivor > 0 && survivor < bound) {
