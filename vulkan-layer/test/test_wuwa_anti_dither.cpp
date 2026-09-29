@@ -3,6 +3,8 @@
 #include <cassert>
 #include <iostream>
 #include <vector>
+#include <filesystem>
+#include <fstream>
 
 static uint32_t make_op(uint16_t length, uint16_t opcode) {
   return (static_cast<uint32_t>(length) << 16) | (static_cast<uint32_t>(opcode) & 0xFFFF);

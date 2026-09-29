@@ -19,16 +19,18 @@ if not get_option('logging')
   layer_cpp_args += ['-DDISABLE_LOGGING']
 endif
 
-# 游戏画像注册表静态库 (单次编译，被动态库与各单测复用)
-game_registry_lib = static_library('game_registry',
+# 核心驱动基础静态库 (单次编译，被动态库与各单测复用)
+game_core_lib = static_library('game_core',
   'src/game_registry.cpp',
+  'src/core/config.cpp',
+  'src/core/logger.cpp',
   dependencies : [vulkan_headers_dep],
   cpp_args : layer_cpp_args
 )
 
 wuwa_layer_lib = shared_library('wuwa_antidither_layer',
   'src/layer.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : layer_cpp_args,
   link_args : ['-Wl,-Bsymbolic', '-static-libstdc++', '-static-libgcc'],
@@ -39,7 +41,7 @@ test_common_args = ['-O2']
 
 wuwa_anti_dither_test = executable('wuwa_anti_dither_test',
   'test/test_wuwa_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -47,7 +49,7 @@ test('wuwa_anti_dither_test', wuwa_anti_dither_test)
 
 nte_anti_dither_test = executable('nte_anti_dither_test',
   'test/test_nte_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -55,7 +57,7 @@ test('nte_anti_dither_test', nte_anti_dither_test)
 
 memory_patcher_test = executable('memory_patcher_test',
   'test/test_memory_patcher.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -63,7 +65,7 @@ test('memory_patcher_test', memory_patcher_test)
 
 hsr_anti_dither_test = executable('hsr_anti_dither_test',
   'test/test_hsr_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -71,7 +73,7 @@ test('hsr_anti_dither_test', hsr_anti_dither_test)
 
 genshin_anti_dither_test = executable('genshin_anti_dither_test',
   'test/test_genshin_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -79,7 +81,7 @@ test('genshin_anti_dither_test', genshin_anti_dither_test)
 
 zzz_anti_dither_test = executable('zzz_anti_dither_test',
   'test/test_zzz_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -87,7 +89,7 @@ test('zzz_anti_dither_test', zzz_anti_dither_test)
 
 azur_promilia_anti_dither_test = executable('azur_promilia_anti_dither_test',
   'test/test_azur_promilia_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -95,7 +97,7 @@ test('azur_promilia_anti_dither_test', azur_promilia_anti_dither_test)
 
 hi3_anti_dither_test = executable('hi3_anti_dither_test',
   'test/test_hi3_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -103,7 +105,7 @@ test('hi3_anti_dither_test', hi3_anti_dither_test)
 
 zmd_anti_dither_test = executable('zmd_anti_dither_test',
   'test/test_zmd_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -111,7 +113,7 @@ test('zmd_anti_dither_test', zmd_anti_dither_test)
 
 gf2_anti_dither_test = executable('gf2_anti_dither_test',
   'test/test_gf2_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -119,7 +121,7 @@ test('gf2_anti_dither_test', gf2_anti_dither_test)
 
 tof_anti_dither_test = executable('tof_anti_dither_test',
   'test/test_tof_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -127,7 +129,7 @@ test('tof_anti_dither_test', tof_anti_dither_test)
 
 dna_anti_dither_test = executable('dna_anti_dither_test',
   'test/test_dna_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -135,7 +137,7 @@ test('dna_anti_dither_test', dna_anti_dither_test)
 
 star_anti_dither_test = executable('star_anti_dither_test',
   'test/test_star_anti_dither.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -143,7 +145,7 @@ test('star_anti_dither_test', star_anti_dither_test)
 
 mihoyo_fps_unlock_test = executable('mihoyo_fps_unlock_test',
   'test/test_mihoyo_fps_unlock.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
@@ -151,7 +153,7 @@ test('mihoyo_fps_unlock_test', mihoyo_fps_unlock_test)
 
 game_registry_test = executable('game_registry_test',
   'test/test_game_registry.cpp',
-  link_with : [game_registry_lib],
+  link_with : [game_core_lib],
   dependencies : [vulkan_headers_dep],
   cpp_args : test_common_args
 )
