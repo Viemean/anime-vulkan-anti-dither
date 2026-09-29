@@ -106,7 +106,7 @@ namespace game_core {
       return;
     }
 
-    std::lock_guard<std::mutex> lock(get_logger_mutex());
+    std::lock_guard<std::recursive_mutex> lock(get_logger_mutex());
     ensure_log_file_open();
     if (!g_log_file) {
       return;
@@ -138,7 +138,7 @@ namespace game_core {
     if (!is_dump_enabled())
       return;
 
-    std::lock_guard<std::mutex> lock(get_logger_mutex());
+    std::lock_guard<std::recursive_mutex> lock(get_logger_mutex());
     const std::string& dir = ensure_dump_dir_ready();
 
     char path_orig[512];
@@ -185,7 +185,7 @@ namespace game_core {
     if (!is_dump_enabled())
       return;
 
-    std::lock_guard<std::mutex> lock(get_logger_mutex());
+    std::lock_guard<std::recursive_mutex> lock(get_logger_mutex());
     const std::string& dir = ensure_dump_dir_ready();
 
     char path_vs[512];

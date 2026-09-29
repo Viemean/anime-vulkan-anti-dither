@@ -30,7 +30,7 @@ namespace game_core {
   extern bool g_zmd_nomask_enabled;
   extern int g_config_zmd_nomask;
 
-  std::mutex& get_logger_mutex();
+  std::recursive_mutex& get_logger_mutex();
 
   void init_config();
   void load_config_file();

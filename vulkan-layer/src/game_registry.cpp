@@ -260,14 +260,23 @@ namespace game_core {
   }
 
   const GameProfile* get_active_profile() {
+    if (!s_active_profile) {
+      init_config();
+    }
     return s_active_profile;
   }
 
   GameId get_active_game_id() {
+    if (!s_active_profile) {
+      init_config();
+    }
     return s_active_id;
   }
 
   bool is_game_active() {
+    if (!s_active_profile) {
+      init_config();
+    }
     return s_active_profile != nullptr;
   }
 

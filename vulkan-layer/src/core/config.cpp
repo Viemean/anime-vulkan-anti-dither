@@ -31,8 +31,8 @@ namespace game_core {
   bool g_zmd_nomask_enabled = false;
   int g_config_zmd_nomask = -1;
 
-  std::mutex& get_logger_mutex() {
-    static std::mutex s_mutex;
+  std::recursive_mutex& get_logger_mutex() {
+    static std::recursive_mutex s_mutex;
     return s_mutex;
   }
 
@@ -139,7 +139,7 @@ namespace game_core {
   }
 
   void init_config() {
-    std::lock_guard<std::mutex> lock(get_logger_mutex());
+    std::lock_guard<std::recursive_mutex> lock(get_logger_mutex());
     if (g_initialized)
       return;
     g_initialized = true;
