@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <mutex>
 #include <string_view>
+#include "game_profile.h"
 
 namespace game_logger {
 
@@ -269,68 +270,27 @@ namespace game_logger {
     g_detected_process = get_process_name();
     get_clean_process_name();
 
+    // 0. 初始化游戏画像注册表
+    game_core::init_game_profiles(g_detected_process);
+
     // 1. 读取静态配置文件 rules.conf
     load_config_file();
 
-    // 2. 依据自定义匹配项及内置进程名白名单进行自动检测
+    // 2. 依据自定义匹配项、已注册游戏画像及通用动漫游戏白名单进行自动检测
     bool auto_detect_enabled = false;
     const char* custom_target = std::getenv("ANTI_DITHER_TARGETS");
     std::string target_match = custom_target ? custom_target : g_config_targets;
 
     if (!target_match.empty() && !g_detected_process.empty() && g_detected_process.find(target_match) != std::string::npos) {
       auto_detect_enabled = true;
+    } else if (game_core::is_game_active()) {
+      auto_detect_enabled = true;
     } else if (
-        // Wuthering Waves (Unreal Engine 4/5)
-        g_detected_process.find("Client-Win64-Shipping") != std::string::npos ||
-        g_detected_process.find("WutheringWaves") != std::string::npos ||
-        g_detected_process.find("Wuthering Waves") != std::string::npos ||
-        g_detected_process.find("Client-Win64") != std::string::npos ||
-        g_detected_process.find("wuwa") != std::string::npos ||
-        // MiHoYo Games (Unity Engine)
-        g_detected_process.find("GenshinImpact") != std::string::npos ||
-        g_detected_process.find("YuanShen") != std::string::npos ||
-        g_detected_process.find("StarRail") != std::string::npos ||
-        g_detected_process.find("ZenlessZoneZero") != std::string::npos ||
-        g_detected_process.find("BH3") != std::string::npos ||
-        g_detected_process.find("Honkai Impact 3") != std::string::npos ||
-        // Azur Promilia (UE)
-        g_detected_process.find("AzurPromilia") != std::string::npos ||
-        g_detected_process.find("Azur Promilia") != std::string::npos ||
-        g_detected_process.find("azur_promilia") != std::string::npos ||
-        g_detected_process.find("AP-Win64") != std::string::npos ||
-        g_detected_process.find("Promilia") != std::string::npos ||
-        // Neverness To Everness (HTGame / UE5)
-        g_detected_process.find("HTGame") != std::string::npos ||
-        g_detected_process.find("HT-Win64") != std::string::npos ||
-        g_detected_process.find("NevernessToEverness") != std::string::npos ||
-        g_detected_process.find("HT") != std::string::npos ||
-        // Duet Night Abyss / 二重螺旋 (EM / UE4)
-        g_detected_process.find("EM-Win64-Shipping") != std::string::npos ||
-        g_detected_process.find("EM-Win64") != std::string::npos ||
-        g_detected_process.find("EM") != std::string::npos ||
-        g_detected_process.find("DuetNightAbyss") != std::string::npos ||
-        g_detected_process.find("DNA") != std::string::npos ||
-        // Other Anime / UE / Unity Games
+        // 通用兜底白名单 (未单独建 Profile 的程序)
         g_detected_process.find("Snowbreak") != std::string::npos ||
         g_detected_process.find("NarakaBladepoint") != std::string::npos ||
         g_detected_process.find("Naraka") != std::string::npos ||
-        g_detected_process.find("InfinityNikki") != std::string::npos ||
-        // Tower of Fantasy (Hotta / UE4)
-        g_detected_process.find("QRSL") != std::string::npos ||
-        g_detected_process.find("Hotta") != std::string::npos ||
-        g_detected_process.find("TOF") != std::string::npos ||
-        g_detected_process.find("TowerOfFantasy") != std::string::npos ||
-        // Arknights: Endfield (Unity / Vulkan)
-        g_detected_process.find("Endfield") != std::string::npos ||
-        g_detected_process.find("endfield") != std::string::npos ||
-        // Girls' Frontline 2: Exilium (Unity / DXVK)
-        g_detected_process.find("GF2_Exilium") != std::string::npos ||
-        g_detected_process.find("GF2") != std::string::npos ||
-        g_detected_process.find("Exilium") != std::string::npos ||
-        // Star / 星痕共鸣 (Unity 2022.3)
-        g_detected_process.find("Star") != std::string::npos ||
-        g_detected_process.find("star") != std::string::npos ||
-        g_detected_process.find("星痕共鸣") != std::string::npos) {
+        g_detected_process.find("InfinityNikki") != std::string::npos) {
       auto_detect_enabled = true;
     }
 
@@ -453,94 +413,62 @@ namespace game_logger {
 
   inline bool is_nte() {
     init_config();
-    return g_detected_process.find("HTGame") != std::string::npos ||
-           g_detected_process.find("HT-Win64") != std::string::npos ||
-           g_detected_process.find("NevernessToEverness") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::NTE;
   }
 
   inline bool is_azur_promilia() {
     init_config();
-    return g_detected_process.find("AzurPromilia") != std::string::npos ||
-           g_detected_process.find("Azur Promilia") != std::string::npos ||
-           g_detected_process.find("azur_promilia") != std::string::npos ||
-           g_detected_process.find("AP-Win64") != std::string::npos ||
-           g_detected_process.find("Promilia") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::AzurPromilia;
   }
 
   inline bool is_hsr() {
     init_config();
-    return g_detected_process.find("StarRail") != std::string::npos ||
-           g_detected_process.find("Star Rail") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::HSR;
   }
 
   inline bool is_genshin() {
     init_config();
-    return g_detected_process.find("YuanShen") != std::string::npos ||
-           g_detected_process.find("GenshinImpact") != std::string::npos ||
-           g_detected_process.find("Genshin Impact") != std::string::npos ||
-           g_detected_process.find("Genshin") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::Genshin;
   }
 
   inline bool is_wuwa() {
     init_config();
-    return g_detected_process.find("Client-Win64-Shipping") != std::string::npos ||
-           g_detected_process.find("WutheringWaves") != std::string::npos ||
-           g_detected_process.find("Wuthering Waves") != std::string::npos ||
-           g_detected_process.find("Client-Win64") != std::string::npos ||
-           g_detected_process.find("wuwa") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::WuWa;
   }
 
   inline bool is_zzz() {
     init_config();
-    return g_detected_process.find("ZenlessZoneZero") != std::string::npos ||
-           g_detected_process.find("Zenless Zone Zero") != std::string::npos ||
-           g_detected_process.find("zzz") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::ZZZ;
   }
 
   inline bool is_hi3() {
     init_config();
-    return g_detected_process.find("BH3") != std::string::npos ||
-           g_detected_process.find("Honkai Impact 3") != std::string::npos ||
-           g_detected_process.find("HonkaiImpact3") != std::string::npos ||
-           g_detected_process.find("HI3") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::HI3rd;
   }
 
   inline bool is_zmd() {
     init_config();
-    return g_detected_process.find("Endfield") != std::string::npos ||
-           g_detected_process.find("endfield") != std::string::npos ||
-           g_detected_process.find("zmd") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::ZMD;
   }
 
   inline bool is_gf2() {
     init_config();
-    return g_detected_process.find("GF2_Exilium") != std::string::npos ||
-           g_detected_process.find("GF2") != std::string::npos ||
-           g_detected_process.find("Exilium") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::GF2;
   }
 
   inline bool is_tof() {
     init_config();
-    return g_detected_process.find("QRSL") != std::string::npos ||
-           g_detected_process.find("Hotta") != std::string::npos ||
-           g_detected_process.find("TOF") != std::string::npos ||
-           g_detected_process.find("TowerOfFantasy") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::TOF;
   }
 
   inline bool is_dna() {
     init_config();
-    return g_detected_process.find("EM-Win64-Shipping") != std::string::npos ||
-           g_detected_process.find("EM-Win64") != std::string::npos ||
-           g_detected_process.find("EM") != std::string::npos ||
-           g_detected_process.find("DuetNightAbyss") != std::string::npos ||
-           g_detected_process.find("DNA") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::DNA;
   }
 
   inline bool is_star() {
     init_config();
-    return g_detected_process.find("Star") != std::string::npos ||
-           g_detected_process.find("star") != std::string::npos ||
-           g_detected_process.find("星痕共鸣") != std::string::npos;
+    return game_core::get_active_game_id() == game_core::GameId::Star;
   }
 
   inline uint32_t compute_spirv_hash(const uint32_t* code, size_t word_count) {

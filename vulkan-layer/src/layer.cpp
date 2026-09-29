@@ -1,21 +1,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 
-#include "wuwa/wuwa_anti_dither.h"
-#include "azur_promilia/azur_promilia_anti_dither.h"
-#include "nte/nte_anti_dither.h"
-#include "hsr/hsr_anti_dither.h"
-#include "genshin/genshin_anti_dither.h"
-#include "zzz/zzz_anti_dither.h"
-#include "HI3rd/hi3_anti_dither.h"
-#include "zmd/zmd_anti_dither.h"
-#include "zmd/zmd_mod.h"
-#include "gf2/gf2_anti_dither.h"
-#include "tof/tof_anti_dither.h"
-#include "dna/dna_anti_dither.h"
-#include "star/star_anti_dither.h"
-#include "../addon/nte/memory_patcher.h"
-#include "../addon/fps_unlock/mihoyo/mihoyo_fps_unlock.h"
+#include "game_profile.h"
+#include "logger.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -36,30 +23,9 @@ namespace {
   }
 
   inline void dispatch_anti_dither_process(uint32_t* code, size_t word_count) {
-    if (game_logger::is_genshin()) {
-      genshin_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_hsr()) {
-      hsr_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_zzz()) {
-      zzz_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_wuwa()) {
-      wuwa_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_nte()) {
-      nte_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_azur_promilia()) {
-      azur_promilia_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_hi3()) {
-      hi3_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_zmd()) {
-      zmd_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_gf2()) {
-      gf2_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_tof()) {
-      tof_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_dna()) {
-      dna_layer::process_spirv_anti_dither(code, word_count);
-    } else if (game_logger::is_star()) {
-      star_layer::process_spirv_anti_dither(code, word_count);
+    auto profile = game_core::get_active_profile();
+    if (profile && profile->process_spirv) {
+      profile->process_spirv(code, word_count);
     }
   }
 
@@ -126,7 +92,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateShaderModule(
   if (!dev_data.create_shader_module)
     return VK_ERROR_INITIALIZATION_FAILED;
 
-  if (pCreateInfo && pCreateInfo->pCode && pCreateInfo->codeSize >= sizeof(uint32_t) * 5 && wuwa_layer::is_layer_active()) {
+  if (pCreateInfo && pCreateInfo->pCode && pCreateInfo->codeSize >= sizeof(uint32_t) * 5 && game_logger::is_active()) {
     size_t word_count = pCreateInfo->codeSize / sizeof(uint32_t);
     std::vector<uint32_t> patched_code(pCreateInfo->pCode, pCreateInfo->pCode + word_count);
 
@@ -160,7 +126,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateGraphicsPipelines(
   if (!dev_data.create_graphics_pipelines)
     return VK_ERROR_INITIALIZATION_FAILED;
 
-  if (!wuwa_layer::is_layer_active() || !pCreateInfos || createInfoCount == 0)
+  if (!game_logger::is_active() || !pCreateInfos || createInfoCount == 0)
     return dev_data.create_graphics_pipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
 
   std::vector<VkGraphicsPipelineCreateInfo> modified_infos(pCreateInfos, pCreateInfos + createInfoCount);
@@ -229,7 +195,7 @@ static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateComputePipelines(
   if (!dev_data.create_compute_pipelines)
     return VK_ERROR_INITIALIZATION_FAILED;
 
-  if (!wuwa_layer::is_layer_active() || !pCreateInfos || createInfoCount == 0)
+  if (!game_logger::is_active() || !pCreateInfos || createInfoCount == 0)
     return dev_data.create_compute_pipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
 
   std::vector<VkComputePipelineCreateInfo> modified_infos(pCreateInfos, pCreateInfos + createInfoCount);
@@ -288,8 +254,8 @@ static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDrawIndexed(
     int32_t                                     vertexOffset,
     uint32_t                                    firstInstance) {
 
-  if (game_logger::is_zmd() && game_logger::is_zmd_nomask_enabled()) {
-    if (zmd_mod::should_skip_mask_draw(indexCount)) {
+  if (__builtin_expect(game_core::g_active_skip_draw_indexed != nullptr, 0)) {
+    if (game_core::g_active_skip_draw_indexed(indexCount)) {
       return;
     }
   }
@@ -637,35 +603,9 @@ extern "C" VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateInstance(
     g_instance_dispatch[get_dispatch_key(*pInstance)] = inst_data;
   }
 
-  if (game_logger::is_nte()) {
-    static std::once_flag s_nte_mem_probe_flag;
-    std::call_once(s_nte_mem_probe_flag, []() {
-      std::thread([]() {
-        game_logger::log_msg("[NTE-Addon] 启动相机防裁剪热补丁服务线程...\n");
-        int stable_confirm_count = 0;
-        for (int attempt = 1; attempt <= 30; ++attempt) {
-          std::this_thread::sleep_for(std::chrono::seconds(2));
-
-          bool ok = nte_mem::apply_anti_hide_camera_patch();
-          if (ok) {
-            stable_confirm_count++;
-            if (stable_confirm_count >= 3) {
-              game_logger::log_msg("[NTE-Addon] 相机防裁剪热补丁已确认稳定常驻 (轮次: %d)\n", attempt);
-              break;
-            }
-          } else {
-            stable_confirm_count = 0;
-          }
-        }
-      }).detach();
-    });
-  }
-
-  if ((game_logger::is_genshin() || game_logger::is_hsr()) && game_logger::is_fps_unlock_enabled()) {
-    static std::once_flag s_mihoyo_fps_probe_flag;
-    std::call_once(s_mihoyo_fps_probe_flag, []() {
-      mihoyo_fps::start_fps_unlock_service();
-    });
+  auto profile = game_core::get_active_profile();
+  if (profile && profile->on_device_created) {
+    profile->on_device_created(VK_NULL_HANDLE);
   }
 
   return VK_SUCCESS;
