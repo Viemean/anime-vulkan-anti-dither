@@ -128,12 +128,51 @@ void test_rva_validation_and_fallback() {
   std::cout << "PASSED\n";
 }
 
+void test_camera_occlusion_branch_patch() {
+  std::cout << "[Test 5] Camera occlusion and distance fade branch patches... ";
+
+  // 模拟两个关键分支结构
+  // 1. ForceOpaqueBranch: 4D 85 C9 75 0D F3 0F 10 05 ... (jne +0D -> NOP NOP)
+  // 2. BranchGateSkipHide: 77 1A (ja +1A -> jmp +1A)
+  long page_size = sysconf(_SC_PAGESIZE);
+  if (page_size <= 0) page_size = 4096;
+
+  void* page = mmap(nullptr, page_size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  assert(page != MAP_FAILED);
+
+  uint8_t* code = reinterpret_cast<uint8_t*>(page);
+  // 模拟 ForceOpaqueBranch (75 0D)
+  code[0] = 0x4D; code[1] = 0x85; code[2] = 0xC9;
+  code[3] = 0x75; code[4] = 0x0D;
+
+  // 模拟 BranchGateSkipHide (77 1A)
+  code[16] = 0x77; code[17] = 0x1A;
+
+  // 执行补丁 1: 75 0D -> 90 90
+  const uint8_t nops[2] = { 0x90, 0x90 };
+  bool ok1 = nte_mem::safe_write_memory(reinterpret_cast<uintptr_t>(code + 3), nops, 2);
+  (void)ok1;
+  assert(ok1);
+  assert(code[3] == 0x90 && code[4] == 0x90);
+
+  // 执行补丁 2: 77 1A -> EB 1A
+  const uint8_t jmp_rel[2] = { 0xEB, 0x1A };
+  bool ok2 = nte_mem::safe_write_memory(reinterpret_cast<uintptr_t>(code + 16), jmp_rel, 2);
+  (void)ok2;
+  assert(ok2);
+  assert(code[16] == 0xEB && code[17] == 0x1A);
+
+  munmap(page, page_size);
+  std::cout << "PASSED (NOP NOP + JMP 1A verified)\n";
+}
+
 int main() {
   std::cout << "Running memory_patcher unit tests...\n";
   test_maps_parsing();
   test_pattern_matching();
   test_safe_memory_patching();
   test_rva_validation_and_fallback();
+  test_camera_occlusion_branch_patch();
   std::cout << "All memory_patcher unit tests PASSED.\n";
   return 0;
 }

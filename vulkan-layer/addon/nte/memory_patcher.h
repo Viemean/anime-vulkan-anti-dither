@@ -217,7 +217,8 @@ namespace nte_mem {
   inline bool safe_write_memory(uintptr_t target_addr,
                                 const uint8_t* patch_bytes,
                                 size_t patch_size,
-                                std::vector<uint8_t>* original_bytes_backup = nullptr) {
+                                std::vector<uint8_t>* original_bytes_backup = nullptr,
+                                bool restore_exec = true) {
     if (target_addr == 0 || !patch_bytes || patch_size == 0) {
       return false;
     }
@@ -241,10 +242,13 @@ namespace nte_mem {
 
     std::memcpy(reinterpret_cast<void*>(target_addr), patch_bytes, patch_size);
 
-    __builtin___clear_cache(reinterpret_cast<char*>(target_addr),
-                            reinterpret_cast<char*>(target_addr + patch_size));
-
-    mprotect(reinterpret_cast<void*>(page_start), protect_len, PROT_READ | PROT_EXEC);
+    if (restore_exec) {
+      __builtin___clear_cache(reinterpret_cast<char*>(target_addr),
+                              reinterpret_cast<char*>(target_addr + patch_size));
+      mprotect(reinterpret_cast<void*>(page_start), protect_len, PROT_READ | PROT_EXEC);
+    } else {
+      mprotect(reinterpret_cast<void*>(page_start), protect_len, PROT_READ | PROT_WRITE);
+    }
 
     game_logger::log_msg("[NTE-Addon] 安全写入内存成功: 地址 0x%lx | 长度: %zu 字节\n", target_addr, patch_size);
     return true;
@@ -253,7 +257,7 @@ namespace nte_mem {
   inline bool safe_nop_memory(uintptr_t target_addr, size_t length, std::vector<uint8_t>* original_bytes_backup = nullptr) {
     if (target_addr == 0 || length == 0) return false;
     std::vector<uint8_t> nops(length, 0x90);
-    return safe_write_memory(target_addr, nops.data(), nops.size(), original_bytes_backup);
+    return safe_write_memory(target_addr, nops.data(), nops.size(), original_bytes_backup, true);
   }
 
   struct FunctionPatchTarget {
@@ -287,6 +291,12 @@ namespace nte_mem {
       module_base = code_start - 0x1000;
     }
 
+    // 1. CameraDistanceFadeAlpha::ForceOpaqueBranch (0x07BB8BC6):
+    //    原版汇编: test r9, r9; jne +0D; movss xmm0, [1.0f]; jmp epilogue (恢复 rbx, rbp, rsi, rdi 并 ret)
+    //    将 jne (75 0D) 改为 NOP (90 90)，使其无条件走函数内置的 1.0f 常量加载与安全栈帧恢复路径。
+    //    既能确保角色全视角 100% 不透明，又完美遵守非叶子函数堆栈 ABI
+    // 2. CameraOcclusion::BranchGateSkipHide (0x07BC010C):
+    //    将条件跳转 ja (77 1A) 改为无条件跳转 jmp (EB 1A)，直接跳过 ExecuteHideCharacter 调用。
     struct MemoryPatchEntry {
       const char* name;
       uintptr_t rva;
@@ -295,52 +305,29 @@ namespace nte_mem {
       std::string pattern_fallback;
     };
 
-    static const MemoryPatchEntry targets[] = {
-      // 1. 相机距离与俯仰角曲线淡化因子计算函数：入口强制返回 1.0f (mov eax, 0x3f800000; movd xmm0, eax; ret)
+    const MemoryPatchEntry targets[] = {
+      // 1. 距离淡化计算函数内置分支：恒定走 1.0f 路径与栈帧安全返回
       {
-        "CameraDistanceFadeAlpha::Compute",
-        0x07BB8BA0,
-        { 0xB8, 0x00, 0x00, 0x80, 0x3F, 0x66, 0x0F, 0x6E, 0xC0, 0xC3 },
-        { 0x48, 0x89, 0x5C, 0x24, 0x08 },
-        "48 89 5C 24 08 48 89 6C"
+        "CameraDistanceFadeAlpha::ForceOpaqueBranch",
+        0x07BB8BC6,
+        { 0x90, 0x90 },
+        { 0x75, 0x0D },
+        "4D 85 C9 75 0D F3 0F 10 05"
       },
-      // 2. 相机透明度隐藏判断门禁：将 ja (77 1A) 改为 jmp (EB 1A)，无条件跳过隐藏函数调用
+      // 2. 相机透明度隐藏判断门禁：将 ja 改为 jmp，跳过 ExecuteHideCharacter 调用
       {
         "CameraOcclusion::BranchGateSkipHide",
         0x07BC010C,
         { 0xEB, 0x1A },
         { 0x77, 0x1A },
         "77 1A 4C 8B C7 48 8B CB"
-      },
-      // 3. 角色隐藏核心执行函数：入口置为 RET (C3)，彻底阻止将角色 HiddenInGame 设为 true
-      {
-        "CameraOcclusion::ExecuteHideCharacter",
-        0x07BDB5A0,
-        { 0xC3 },
-        { 0x4D, 0x85, 0xC0 },
-        "4D 85 C0 0F 84 81 00 00"
-      },
-      // 4. 角色网格隐藏函数原生实现：入口置为 RET (C3)
-      {
-        "AHTCharacter::HideCharacterMesh",
-        0x06EA52B0,
-        { 0xC3 },
-        { 0x48, 0x83, 0xEC, 0x28 },
-        "48 83 EC 28 48 8B 05 ?? ?? ?? ??"
-      },
-      // 5. 角色网格隐藏函数蓝图封装：入口置为 RET (C3)
-      {
-        "execHideCharacterMesh",
-        0x06EA55A0,
-        { 0xC3 },
-        { 0x48, 0x83, 0xEC, 0x28 },
-        "48 83 EC 28 B9 10 00 00"
       }
     };
 
     bool all_patched = true;
 
     for (const auto& tgt : targets) {
+
       uintptr_t target_addr = module_base + tgt.rva;
       bool target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
 
@@ -372,9 +359,9 @@ namespace nte_mem {
         }
       }
 
-      // 若静态 RVA 不匹配预期机器码，触发动态特征码扫描兜底 (跨版本自适应)
+      // 若静态 RVA 不匹配预期机器码，触发动态特征码扫描
       if (!rva_matched) {
-        game_logger::log_msg("[NTE-Addon] 目标 %s 静态 RVA (0x%lx) 预期机器码不匹配，触发动态特征码扫描兜底...\n",
+        game_logger::log_msg("[NTE-Addon] 目标 %s 静态 RVA (0x%lx) 预期机器码不匹配，触发动态特征码扫描...\n",
                              tgt.name, tgt.rva);
         if (!tgt.pattern_fallback.empty()) {
           uintptr_t matched_addr = scan_module_pattern(module_path, tgt.pattern_fallback, true);
@@ -385,12 +372,12 @@ namespace nte_mem {
             target_addr = matched_addr;
             target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
           } else {
-            game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 动态特征码未命中，触发熔断保护，拒绝写入\n", tgt.name);
+            game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 动态特征码未命中，拒绝写入\n", tgt.name);
             all_patched = false;
             continue;
           }
         } else {
-          game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 缺少特征码兜底，触发熔断保护，拒绝写入\n", tgt.name);
+          game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 缺少特征码兜底，拒绝写入\n", tgt.name);
           all_patched = false;
           continue;
         }
@@ -410,6 +397,7 @@ namespace nte_mem {
                            tgt.name, target_addr,
                            preview[0], preview[1], preview[2], preview[3],
                            preview[4], preview[5], preview[6], preview[7]);
+
 
       std::vector<uint8_t> backup;
       if (safe_write_memory(target_addr, tgt.patch_bytes.data(), tgt.patch_bytes.size(), &backup)) {
