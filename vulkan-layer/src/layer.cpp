@@ -14,6 +14,7 @@
 #include "dna/dna_anti_dither.h"
 #include "star/star_anti_dither.h"
 #include "../addon/nte/memory_patcher.h"
+#include "../addon/fps_unlock/mihoyo/mihoyo_fps_unlock.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -618,6 +619,13 @@ extern "C" VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateInstance(
           }
         }
       }).detach();
+    });
+  }
+
+  if ((game_logger::is_genshin() || game_logger::is_hsr()) && game_logger::is_fps_unlock_enabled()) {
+    static std::once_flag s_mihoyo_fps_probe_flag;
+    std::call_once(s_mihoyo_fps_probe_flag, []() {
+      mihoyo_fps::start_fps_unlock_service();
     });
   }
 

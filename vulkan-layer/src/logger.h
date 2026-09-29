@@ -28,7 +28,7 @@ namespace game_logger {
   inline bool g_enabled = false;
   inline int g_config_enabled = -1; // -1: 未在配置中指定, 0: 显式禁用, 1: 显式启用
   inline bool g_dump_enabled = false;
-  inline bool g_log_enabled = false; // 发行版默认静默，零磁盘 I/O 开销
+  inline bool g_log_enabled = false; // 发行版默认静默
   inline std::string g_detected_process;
   inline std::string g_clean_process_name;
   inline std::string g_config_targets;
@@ -37,6 +37,9 @@ namespace game_logger {
   inline bool g_force_all = false;
   inline uint32_t g_force_hash_min = 0x00000000u;
   inline uint32_t g_force_hash_max = 0xFFFFFFFFu;
+  inline bool g_fps_unlock_enabled = false;
+  inline int g_config_fps_unlock = -1; // -1: 未在配置中指定, 0: 显式禁用, 1: 显式启用
+  inline int32_t g_target_fps = 120; // 默认 120 帧，低于 30 自动设置为 30
 
   inline FILE* g_log_file = nullptr;
   inline bool g_log_file_initialized = false;
@@ -241,6 +244,13 @@ namespace game_logger {
         g_force_hash_min = static_cast<uint32_t>(std::strtoul(val.c_str(), nullptr, 0));
       } else if (key == "hash_max") {
         g_force_hash_max = static_cast<uint32_t>(std::strtoul(val.c_str(), nullptr, 0));
+      } else if (key == "fps_unlock" || key == "unlock_fps") {
+        g_config_fps_unlock = (val == "1") ? 1 : ((val == "0") ? 0 : -1);
+      } else if (key == "target_fps" || key == "fps") {
+        try {
+          int32_t parsed_fps = std::stoi(val);
+          g_target_fps = (parsed_fps == 0 || parsed_fps == -1) ? 0 : ((parsed_fps < 30) ? 30 : parsed_fps);
+        } catch (...) {}
       }
     }
   }
@@ -367,6 +377,44 @@ namespace game_logger {
     const char* env_max = std::getenv("ANTI_DITHER_HASH_MAX");
     if (env_max)
       g_force_hash_max = static_cast<uint32_t>(std::strtoul(env_max, nullptr, 0));
+
+    if (g_config_fps_unlock != -1) {
+      g_fps_unlock_enabled = (g_config_fps_unlock == 1);
+    }
+
+    const char* env_unlock = std::getenv("ANTI_DITHER_UNLOCK_FPS");
+    if (!env_unlock)
+      env_unlock = std::getenv("ANTI_DITHER_FPS_UNLOCK");
+    if (env_unlock) {
+      if (std::strcmp(env_unlock, "1") == 0) g_fps_unlock_enabled = true;
+      else if (std::strcmp(env_unlock, "0") == 0) g_fps_unlock_enabled = false;
+    }
+
+    const char* env_target_fps = std::getenv("ANTI_DITHER_TARGET_FPS");
+    if (!env_target_fps)
+      env_target_fps = std::getenv("ANTI_DITHER_FPS");
+    if (env_target_fps) {
+      try {
+        int32_t parsed_fps = std::stoi(env_target_fps);
+        g_target_fps = (parsed_fps == 0 || parsed_fps == -1) ? 0 : ((parsed_fps < 30) ? 30 : parsed_fps);
+      } catch (...) {}
+    }
+  }
+
+  inline bool is_fps_unlock_enabled() {
+    init_config();
+    return g_fps_unlock_enabled;
+  }
+
+  inline int32_t get_target_fps() {
+    init_config();
+    return g_target_fps;
+  }
+
+  inline int32_t get_effective_engine_fps() {
+    init_config();
+    // 0 表示解除最大上限，在 Unity 内部对应 -1
+    return (g_target_fps == 0) ? -1 : g_target_fps;
   }
 
   inline bool is_log_enabled() {

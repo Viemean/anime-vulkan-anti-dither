@@ -130,3 +130,12 @@ star_anti_dither_test = executable('star_anti_dither_test',
 )
 
 test('star_anti_dither_test', star_anti_dither_test)
+
+mihoyo_fps_unlock_test = executable('mihoyo_fps_unlock_test',
+  'test/test_mihoyo_fps_unlock.cpp',
+  dependencies : [vulkan_headers_dep],
+  cpp_args : ['-O2']
+)
+
+test('mihoyo_fps_unlock_test', mihoyo_fps_unlock_test)
+
