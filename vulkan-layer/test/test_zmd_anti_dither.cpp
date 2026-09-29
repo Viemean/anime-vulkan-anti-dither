@@ -316,11 +316,32 @@ void test_zmd_dxvk_alpha_cutout_preserved() {
 void test_zmd_nomask_index_detection() {
   std::cout << "[Test ZMD 7] Administrator mask index count detection... ";
 
-  // 主面具 (18220d55)
+  // 默认情况下 4524 作为管理员主面具在所有 Pass 下无条件消除
+  assert(zmd_mod::should_skip_mask_draw(0) == false);
   assert(zmd_mod::should_skip_mask_draw(4524) == true);
-  assert(zmd_mod::should_skip_mask_draw(2028) == true);
+  assert(zmd_mod::should_skip_mask_draw(9000) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == true);
+  assert(zmd_mod::should_skip_mask_draw(27615) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == true);
+  assert(zmd_mod::should_skip_mask_draw(12345) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == true);
 
-  // 镜架/配件 (4cd1ad3b)
+  // 陈千语专属特征保护门禁: 紧随陈千语 Submesh (888, 714, 9477, 15138, 46728, 139392) 的 4524 必须保护放行
+  assert(zmd_mod::should_skip_mask_draw(888) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == false);
+  assert(zmd_mod::should_skip_mask_draw(714) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == false);
+  assert(zmd_mod::should_skip_mask_draw(9477) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == false);
+  assert(zmd_mod::should_skip_mask_draw(15138) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == false);
+  assert(zmd_mod::should_skip_mask_draw(46728) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == false);
+  assert(zmd_mod::should_skip_mask_draw(139392) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == false);
+
+  // 远景 LOD 与配件 (不受时序影响，直接判定)
+  assert(zmd_mod::should_skip_mask_draw(2028) == true);
   assert(zmd_mod::should_skip_mask_draw(117) == true);
   assert(zmd_mod::should_skip_mask_draw(69) == true);
   assert(zmd_mod::should_skip_mask_draw(51) == true);
