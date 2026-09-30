@@ -8,11 +8,10 @@ vulkan-layer/subprojects/*
 .vscode/
 *.log
 *.tmp
-
 /DOCS_WUWA_ANTI_DITHER.md
 /upstream/
 /release.sh
-/README.md
+
 /NTE_ANTI_HIDE_RESEARCH_NOTES.md
 /AGENTS.md
 docs/
