@@ -303,7 +303,7 @@ namespace nte_mem {
       uintptr_t rva;
       std::vector<uint8_t> patch_bytes;
       std::vector<uint8_t> expected_orig_bytes;
-      std::string pattern_fallback;
+      std::vector<std::string> pattern_candidates;
       size_t pattern_offset;
     };
 
@@ -316,7 +316,14 @@ namespace nte_mem {
         0x07BB8F56, // 更新后新版 RVA (旧版: 0x07BB8BC6)
         { 0x90, 0x90 },
         { 0x75, 0x0D },
-        "4D 85 C9 75 0D F3 0F 10 05",
+        {
+          // 候选 1: 高精度通配符长模式 (容忍跳转偏移 ?? 与浮点池常量寻址 [rip+????])
+          "4D 85 C9 75 ?? F3 0F 10 ? ? ? ?",
+          // 候选 2: 双态通配符模式 (修改位置为 ?? ??，未补丁或已补丁皆可命中)
+          "4D 85 C9 ?? ?? F3 0F 10",
+          // 候选 3: 宽松寄存器签名 (容忍 r9 寄存器微调分配)
+          "4D 85 ?? 75 ?? F3 0F 10"
+        },
         3
       },
       // 2. 相机透明度隐藏判断门禁：将 ja 改为 jmp，跳过 ExecuteHideCharacter 调用
@@ -327,7 +334,14 @@ namespace nte_mem {
         0x07BC049C, // 更新后新版 RVA (旧版: 0x07BC010C)
         { 0xEB, 0x1A },
         { 0x77, 0x1A },
-        "77 1A 4C 8B C7 48 8B CB",
+        {
+          // 候选 1: 双态通配符模式 (修改位置为 ?? ??，未补丁或已补丁均可命中)
+          "?? ?? 4C 8B C7 48 8B CB",
+          // 候选 2: 容忍跳转偏移变化的原始特征
+          "77 ?? 4C 8B C7 48 8B CB",
+          // 候选 3: 全字节保底签名
+          "77 1A 4C 8B C7 48 8B CB"
+        },
         0
       }
     };
@@ -377,20 +391,28 @@ namespace nte_mem {
         }
       }
 
-      // 若当前地址不匹配预期原始机器码，触发动态特征码扫描
+      // 若当前地址不匹配预期原始机器码，触发通配符级联扫描 (应对跨版本代码漂移)
       if (!orig_matched) {
-        game_logger::log_msg("[NTE-Addon] 目标 %s 当前地址 (0x%lx) 预期原始机器码不匹配，触发动态特征码扫描...\n",
+        game_logger::log_msg("[NTE-Addon] 目标 %s 当前地址 (0x%lx) 预期原始机器码不匹配，触发通配符级联扫描...\n",
                              tgt.name, target_addr);
-        if (!tgt.pattern_fallback.empty()) {
-          uintptr_t matched_addr = scan_module_pattern(module_path, tgt.pattern_fallback, true);
+        if (!tgt.pattern_candidates.empty()) {
+          uintptr_t matched_addr = 0;
+          for (const auto& pat : tgt.pattern_candidates) {
+            matched_addr = scan_module_pattern(module_path, pat, true);
+            if (matched_addr != 0) {
+              game_logger::log_msg("[NTE-Addon] 命中候选特征码: [%s]\n", pat.c_str());
+              break;
+            }
+          }
+
           if (matched_addr != 0) {
             target_addr = matched_addr + tgt.pattern_offset;
             uintptr_t new_rva = target_addr - module_base;
-            game_logger::log_msg("[NTE-Addon] 动态特征码扫描成功定位 %s: 新地址 0x%lx (新 RVA: 0x%lx, 偏移: +%zu)\n",
+            game_logger::log_msg("[NTE-Addon] 特征码扫描成功定位 %s: 新地址 0x%lx (新 RVA: 0x%lx, 偏移: +%zu)\n",
                                  tgt.name, target_addr, new_rva, tgt.pattern_offset);
             target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
 
-            // 再次检查扫描出的地址是否已补丁
+            // 再次检查扫描出的地址是否已补丁 (双态匹配支持)
             if (target_valid) {
               bool already_patched = true;
               const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
@@ -406,7 +428,7 @@ namespace nte_mem {
               }
             }
           } else {
-            game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 动态特征码未命中，拒绝写入\n", tgt.name);
+            game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 所有候选特征码均未命中，熔断拒绝写入\n", tgt.name);
             all_patched = false;
             continue;
           }

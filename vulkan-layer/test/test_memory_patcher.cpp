@@ -166,6 +166,56 @@ void test_camera_occlusion_branch_patch() {
   std::cout << "PASSED (NOP NOP + JMP 1A verified)\n";
 }
 
+void test_version_update_drift_resilience() {
+  std::cout << "[Test 6] Real-world update drift & fail-safe gate... ";
+  long page_size = sysconf(_SC_PAGESIZE);
+  if (page_size <= 0) page_size = 4096;
+
+  void* page = mmap(nullptr, page_size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  assert(page != MAP_FAILED);
+
+  uint8_t* raw = reinterpret_cast<uint8_t*>(page);
+  uintptr_t base = reinterpret_cast<uintptr_t>(page);
+
+  // 模拟版本漂移场景：
+  // 1. 静态 RVA 0x100 处保留废弃代码
+  raw[0x100] = 0x48; raw[0x101] = 0x89; raw[0x102] = 0x5C; raw[0x103] = 0x24;
+
+  // 2. 真实目标漂移到 0x240，跳转跨度由 0x0D 变异为 0x14，常量池寻址偏移变异为 0x0D
+  raw[0x240] = 0x4D; raw[0x241] = 0x85; raw[0x242] = 0xC9;
+  raw[0x243] = 0x75; raw[0x244] = 0x14; // 目标待修补位置 (偏移 +3)
+  raw[0x245] = 0xF3; raw[0x246] = 0x0F; raw[0x247] = 0x10; raw[0x248] = 0x0D;
+
+  // 3. 通配符模式匹配：4D 85 C9 75 ?? F3 0F 10
+  nte_mem::SignaturePattern wildcard_pat("4D 85 C9 75 ?? F3 0F 10 ? ? ? ?");
+  uintptr_t matched = nte_mem::scan_memory(base, page_size, wildcard_pat);
+  (void)matched;
+  assert(matched == base + 0x240);
+
+  // 4. 写前核验门禁：核验 +3 处原始字节
+  uintptr_t target_addr = matched + 3;
+  const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
+  (void)cur_ptr;
+  assert(cur_ptr[0] == 0x75 && cur_ptr[1] == 0x14);
+
+  // 5. 执行安全修改
+  const uint8_t nops[2] = { 0x90, 0x90 };
+  bool ok = nte_mem::safe_write_memory(target_addr, nops, 2);
+  (void)ok;
+  assert(ok);
+  assert(raw[0x240] == 0x4D && raw[0x241] == 0x85 && raw[0x242] == 0xC9); // 上下文完好
+  assert(raw[0x243] == 0x90 && raw[0x244] == 0x90);                         // 目标 NOP NOP
+
+  // 6. 双态通配符二次识别 (已修补状态直接判定)
+  nte_mem::SignaturePattern dual_state_pat("4D 85 C9 ?? ?? F3 0F 10");
+  uintptr_t recheck = nte_mem::scan_memory(base, page_size, dual_state_pat);
+  (void)recheck;
+  assert(recheck == base + 0x240);
+
+  munmap(page, page_size);
+  std::cout << "PASSED (Wildcard + Offset + Fail-safe verified)\n";
+}
+
 int main() {
   std::cout << "Running memory_patcher unit tests...\n";
   test_maps_parsing();
@@ -173,6 +223,7 @@ int main() {
   test_safe_memory_patching();
   test_rva_validation_and_fallback();
   test_camera_occlusion_branch_patch();
+  test_version_update_drift_resilience();
   std::cout << "All memory_patcher unit tests PASSED.\n";
   return 0;
 }
