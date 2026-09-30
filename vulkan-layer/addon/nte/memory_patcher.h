@@ -11,6 +11,7 @@
 #include <sstream>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <unordered_map>
 
 namespace nte_mem {
 
@@ -303,32 +304,48 @@ namespace nte_mem {
       std::vector<uint8_t> patch_bytes;
       std::vector<uint8_t> expected_orig_bytes;
       std::string pattern_fallback;
+      size_t pattern_offset;
     };
 
     const MemoryPatchEntry targets[] = {
       // 1. 距离淡化计算函数内置分支：恒定走 1.0f 路径与栈帧安全返回
+      //    原版: 4D 85 C9 (test r9, r9) 75 0D (jne +0D) ...
+      //    修改点位于特征码起始位置 +3 字节处，将 75 0D 改为 90 90 (NOP NOP)
       {
         "CameraDistanceFadeAlpha::ForceOpaqueBranch",
-        0x07BB8BC6,
+        0x07BB8F56, // 更新后新版 RVA (旧版: 0x07BB8BC6)
         { 0x90, 0x90 },
         { 0x75, 0x0D },
-        "4D 85 C9 75 0D F3 0F 10 05"
+        "4D 85 C9 75 0D F3 0F 10 05",
+        3
       },
       // 2. 相机透明度隐藏判断门禁：将 ja 改为 jmp，跳过 ExecuteHideCharacter 调用
+      //    原版: 77 1A (ja +1A) 4C 8B C7 48 8B CB ...
+      //    修改点位于特征码起始位置 (+0 字节)，将 77 1A 改为 EB 1A (jmp +1A)
       {
         "CameraOcclusion::BranchGateSkipHide",
-        0x07BC010C,
+        0x07BC049C, // 更新后新版 RVA (旧版: 0x07BC010C)
         { 0xEB, 0x1A },
         { 0x77, 0x1A },
-        "77 1A 4C 8B C7 48 8B CB"
+        "77 1A 4C 8B C7 48 8B CB",
+        0
       }
     };
+
+    // 缓存已解析定位的有效内存地址，保障多次轮询下的幂等性
+    static std::unordered_map<std::string, uintptr_t> s_resolved_addrs;
 
     bool all_patched = true;
 
     for (const auto& tgt : targets) {
+      uintptr_t target_addr = 0;
+      auto it_resolved = s_resolved_addrs.find(tgt.name);
+      if (it_resolved != s_resolved_addrs.end() && it_resolved->second != 0) {
+        target_addr = it_resolved->second;
+      } else {
+        target_addr = module_base + tgt.rva;
+      }
 
-      uintptr_t target_addr = module_base + tgt.rva;
       bool target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
 
       // 检查是否已经打过该补丁 (幂等性保护)
@@ -342,35 +359,52 @@ namespace nte_mem {
           }
         }
         if (already_patched) {
+          s_resolved_addrs[tgt.name] = target_addr;
           continue;
         }
       }
 
-      // 前置一致性检查：校验静态 RVA 处的预期机器码是否匹配
-      bool rva_matched = false;
+      // 前置一致性检查：校验目标地址处的预期机器码是否匹配
+      bool orig_matched = false;
       if (target_valid) {
-        rva_matched = true;
+        orig_matched = true;
         const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
         for (size_t i = 0; i < tgt.expected_orig_bytes.size(); ++i) {
           if (cur_ptr[i] != tgt.expected_orig_bytes[i]) {
-            rva_matched = false;
+            orig_matched = false;
             break;
           }
         }
       }
 
-      // 若静态 RVA 不匹配预期机器码，触发动态特征码扫描
-      if (!rva_matched) {
-        game_logger::log_msg("[NTE-Addon] 目标 %s 静态 RVA (0x%lx) 预期机器码不匹配，触发动态特征码扫描...\n",
-                             tgt.name, tgt.rva);
+      // 若当前地址不匹配预期原始机器码，触发动态特征码扫描
+      if (!orig_matched) {
+        game_logger::log_msg("[NTE-Addon] 目标 %s 当前地址 (0x%lx) 预期原始机器码不匹配，触发动态特征码扫描...\n",
+                             tgt.name, target_addr);
         if (!tgt.pattern_fallback.empty()) {
           uintptr_t matched_addr = scan_module_pattern(module_path, tgt.pattern_fallback, true);
           if (matched_addr != 0) {
-            uintptr_t new_rva = matched_addr - module_base;
-            game_logger::log_msg("[NTE-Addon] 动态特征码扫描成功定位 %s: 新地址 0x%lx (新 RVA: 0x%lx)\n",
-                                 tgt.name, matched_addr, new_rva);
-            target_addr = matched_addr;
+            target_addr = matched_addr + tgt.pattern_offset;
+            uintptr_t new_rva = target_addr - module_base;
+            game_logger::log_msg("[NTE-Addon] 动态特征码扫描成功定位 %s: 新地址 0x%lx (新 RVA: 0x%lx, 偏移: +%zu)\n",
+                                 tgt.name, target_addr, new_rva, tgt.pattern_offset);
             target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
+
+            // 再次检查扫描出的地址是否已补丁
+            if (target_valid) {
+              bool already_patched = true;
+              const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
+              for (size_t i = 0; i < tgt.patch_bytes.size(); ++i) {
+                if (cur_ptr[i] != tgt.patch_bytes[i]) {
+                  already_patched = false;
+                  break;
+                }
+              }
+              if (already_patched) {
+                s_resolved_addrs[tgt.name] = target_addr;
+                continue;
+              }
+            }
           } else {
             game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 动态特征码未命中，拒绝写入\n", tgt.name);
             all_patched = false;
@@ -390,6 +424,22 @@ namespace nte_mem {
         continue;
       }
 
+      // 严格安全核验：目标地址当前字节必须 100% 匹配预期原始操作码
+      const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
+      bool bytes_verified = true;
+      for (size_t i = 0; i < tgt.expected_orig_bytes.size(); ++i) {
+        if (cur_ptr[i] != tgt.expected_orig_bytes[i]) {
+          bytes_verified = false;
+          break;
+        }
+      }
+      if (!bytes_verified) {
+        game_logger::log_msg("[NTE-Addon] [FAILED] 目标 %s 地址 0x%lx 机器码不匹配预期原始操作码，拒绝写入\n",
+                             tgt.name, target_addr);
+        all_patched = false;
+        continue;
+      }
+
       uint8_t preview[8] = {0};
       std::memcpy(preview, reinterpret_cast<const void*>(target_addr), sizeof(preview));
 
@@ -398,11 +448,11 @@ namespace nte_mem {
                            preview[0], preview[1], preview[2], preview[3],
                            preview[4], preview[5], preview[6], preview[7]);
 
-
       std::vector<uint8_t> backup;
       if (safe_write_memory(target_addr, tgt.patch_bytes.data(), tgt.patch_bytes.size(), &backup)) {
         game_logger::log_msg("[NTE-Addon] [SUCCESS] 已成功热补丁 %s | 写入 %zu 字节\n",
                              tgt.name, tgt.patch_bytes.size());
+        s_resolved_addrs[tgt.name] = target_addr;
       } else {
         game_logger::log_msg("[NTE-Addon] [FAILED] 热补丁 %s 写入失败\n", tgt.name);
         all_patched = false;
