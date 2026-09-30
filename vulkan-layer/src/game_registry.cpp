@@ -21,6 +21,7 @@
 #include <thread>
 #include <chrono>
 #include <mutex>
+#include <memory>
 #include <cstring>
 #include <array>
 
@@ -32,7 +33,7 @@ namespace game_core {
     // 各游戏专有关键词表 (进程名匹配)
     // --------------------------------------------------------------------------
     const char* const kKeywordsWuWa[] = {
-      "Client-Win64-Shipping", "WutheringWaves", "Wuthering Waves", "Client-Win64", "wuwa", nullptr
+      "Client-Win64-Shipping", "WutheringWaves", "Wuthering Waves", "wuwa", nullptr
     };
     const char* const kKeywordsGenshin[] = {
       "GenshinImpact", "YuanShen", "Genshin Impact", "Genshin", nullptr
@@ -41,10 +42,10 @@ namespace game_core {
       "StarRail", "Star Rail", nullptr
     };
     const char* const kKeywordsZZZ[] = {
-      "ZenlessZoneZero", "Zenless Zone Zero", "zzz", nullptr
+      "ZenlessZoneZero", "Zenless Zone Zero", nullptr
     };
     const char* const kKeywordsHI3[] = {
-      "BH3", "Honkai Impact 3", "HonkaiImpact3", "HI3", nullptr
+      "BH3", "Honkai Impact 3", "HonkaiImpact3", nullptr
     };
     const char* const kKeywordsNTE[] = {
       "HTGame", "HT-Win64", "NevernessToEverness", "HTGame-Win64-Shipping", nullptr
@@ -53,19 +54,19 @@ namespace game_core {
       "AzurPromilia", "Azur Promilia", "azur_promilia", "AP-Win64", "Promilia", nullptr
     };
     const char* const kKeywordsZMD[] = {
-      "Endfield", "endfield", "zmd", nullptr
+      "Endfield", "endfield", "Endfield-Win64", nullptr
     };
     const char* const kKeywordsGF2[] = {
-      "GF2_Exilium", "GF2", "Exilium", nullptr
+      "GF2_Exilium", "Exilium", nullptr
     };
     const char* const kKeywordsTOF[] = {
-      "QRSL", "Hotta", "TOF", "TowerOfFantasy", nullptr
+      "QRSL", "TowerOfFantasy", "Hotta", nullptr
     };
     const char* const kKeywordsDNA[] = {
-      "EM-Win64-Shipping", "EM-Win64", "EM", "DuetNightAbyss", "DNA", nullptr
+      "EM-Win64-Shipping", "EM-Win64", "DuetNightAbyss", nullptr
     };
     const char* const kKeywordsStar[] = {
-      "Star", "star", "星痕共鸣", nullptr
+      "Star", "Star-Win64", "StarGame", "星痕共鸣", nullptr
     };
 
     // --------------------------------------------------------------------------
@@ -242,7 +243,7 @@ namespace game_core {
 
     const GameProfile* s_active_profile = nullptr;
     GameId s_active_id = GameId::Unknown;
-    std::once_flag s_init_flag;
+    static std::unique_ptr<std::once_flag> s_init_flag = std::make_unique<std::once_flag>();
 
   } // namespace
 
@@ -250,13 +251,35 @@ namespace game_core {
     if (process_name.empty()) {
       return;
     }
-    std::call_once(s_init_flag, [&]() {
+    std::call_once(*s_init_flag, [&]() {
+      // 提取纯文件名 (Base Name) 并剔除 .exe 扩展名，消除父目录路径字符串干扰
+      std::string_view full_name = process_name;
+      size_t last_slash = full_name.find_last_of("/\\");
+      std::string_view base_name = (last_slash == std::string_view::npos) ? full_name : full_name.substr(last_slash + 1);
+
+      if (base_name.size() > 4) {
+        std::string_view ext = base_name.substr(base_name.size() - 4);
+        if (ext == ".exe" || ext == ".EXE") {
+          base_name = base_name.substr(0, base_name.size() - 4);
+        }
+      }
+
       for (const auto& profile : kProfiles) {
         if (!profile.process_keywords)
           continue;
 
         for (size_t i = 0; profile.process_keywords[i] != nullptr; ++i) {
-          if (process_name.find(profile.process_keywords[i]) != std::string_view::npos) {
+          std::string_view kw = profile.process_keywords[i];
+          bool matched = false;
+          if (kw.size() <= 4) {
+            // 短关键字：必须与纯可执行文件名完全相同 (如 "Star", "BH3", "wuwa")
+            matched = (base_name == kw);
+          } else {
+            // 长关键字：允许作为纯文件名的子串 (如 "GenshinImpact", "EM-Win64-Shipping", "ZenlessZoneZero")
+            matched = (base_name.find(kw) != std::string_view::npos);
+          }
+
+          if (matched) {
             s_active_profile = &profile;
             s_active_id = profile.id;
 
@@ -290,6 +313,13 @@ namespace game_core {
       init_config();
     }
     return s_active_profile != nullptr;
+  }
+
+  void reset_game_profiles_for_test() {
+    s_active_profile = nullptr;
+    s_active_id = GameId::Unknown;
+    g_active_skip_draw_indexed = nullptr;
+    s_init_flag = std::make_unique<std::once_flag>();
   }
 
 } // namespace game_core

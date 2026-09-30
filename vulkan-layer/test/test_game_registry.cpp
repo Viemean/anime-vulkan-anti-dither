@@ -35,19 +35,60 @@ void test_all_game_profiles_matched() {
 
   for (const auto& c : cases) {
     // 模拟重置初始化
+    game_core::reset_game_profiles_for_test();
     game_core::init_game_profiles(c.process);
 
     // 验证当前激活的 Profile
     const auto* profile = game_core::get_active_profile();
     if (!profile || profile->id != c.expected_id || std::string(profile->name) != c.expected_name) {
-      std::cerr << "Profile mismatch\n";
+      std::cerr << "Profile mismatch for process: " << c.process << "\n";
       std::abort();
     }
     (void)profile;
-    break; // 因为 init_game_profiles 内部使用 std::once_flag，首个即单例绑定
   }
 
-  std::cout << "PASSED\n";
+  std::cout << "PASSED (All 12 Profiles verified)\n";
+}
+
+// 验证路径隔离与短词防误伤机制 (确保 Starfield, GEMINI, NTELauncher 等不会被误激活)
+void test_anti_false_positive_matching() {
+  std::cout << "[Test Game Registry 2] Anti-False-Positive Path & Keyword Isolation... ";
+
+  const char* non_target_processes[] = {
+    // 1. Starfield 绝对不能误伤为 Star (星痕共鸣)
+    "D:\\SteamLibrary\\steamapps\\common\\Starfield\\Starfield.exe",
+    "/home/user/games/starfield/starfield.exe",
+    "Starfield.exe",
+    "starship.exe",
+
+    // 2. GEMINI 或含有 EM 的路径不能误伤为 DNA (二重螺旋)
+    "/home/yuzuki/.gemini/antigravity/tools/my_test_tool.exe",
+    "C:\\Windows\\System32\\remoteproc.exe",
+    "element_render.exe",
+
+    // 3. 启动器与辅助工具不能误伤为 NTE / ZMD / TOF / ZZZ
+    "/mnt/HDD/Games/NTE/Neverness To Everness/NTELauncher.exe",
+    "NTELauncher.exe",
+    "NTEBrowser.exe",
+    "zmd_extract_tool.exe",
+    "tof_camera_debug.exe",
+    "zzz_sleep_daemon.exe",
+    "gf2_unpack.exe"
+  };
+
+  for (const char* proc : non_target_processes) {
+    game_core::reset_game_profiles_for_test();
+    game_core::init_game_profiles(proc);
+
+    const auto* profile = game_core::get_active_profile();
+    if (profile != nullptr) {
+      std::cerr << "\n[FALSE POSITIVE DETECTED] Process '" << proc 
+                << "' was falsely matched as: " << profile->name << "\n";
+      std::abort();
+    }
+  }
+
+  std::cout << "PASSED (0 False Positives)\n";
 }
 
 // 验证通用 Mod 开关体系 (is_mod_enabled 与大小写环境变量全自动适配)
@@ -87,6 +128,7 @@ void test_generic_mod_framework() {
 int main() {
   std::cout << "=== Game Registry & Profile Architecture Unit Tests ===\n";
   test_all_game_profiles_matched();
+  test_anti_false_positive_matching();
   test_generic_mod_framework();
   std::cout << "=== All Game Registry Tests Passed Successfully ===\n";
   return 0;

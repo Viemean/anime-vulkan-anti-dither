@@ -54,6 +54,7 @@ namespace game_core {
   inline bool (*g_active_skip_draw_indexed)(uint32_t index_count) = nullptr;
 
   void init_game_profiles(std::string_view process_name);
+  void reset_game_profiles_for_test();
   const GameProfile* get_active_profile();
   GameId get_active_game_id();
   bool is_game_active();
