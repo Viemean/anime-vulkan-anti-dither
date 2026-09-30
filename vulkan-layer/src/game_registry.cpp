@@ -47,7 +47,7 @@ namespace game_core {
       "BH3", "Honkai Impact 3", "HonkaiImpact3", "HI3", nullptr
     };
     const char* const kKeywordsNTE[] = {
-      "HTGame", "HT-Win64", "NevernessToEverness", "HT", nullptr
+      "HTGame", "HT-Win64", "NevernessToEverness", "HTGame-Win64-Shipping", nullptr
     };
     const char* const kKeywordsAzurPromilia[] = {
       "AzurPromilia", "Azur Promilia", "azur_promilia", "AP-Win64", "Promilia", nullptr
@@ -73,6 +73,19 @@ namespace game_core {
     // --------------------------------------------------------------------------
     void on_nte_device_created(VkDevice device) {
       (void)device;
+      if (!game_logger::is_active()) {
+        return;
+      }
+
+      // 启动器与辅助进程防护：严禁对 NTELauncher/Browser/Update 等进程执行热补丁
+      std::string proc = game_core::get_clean_process_name();
+      if (proc.find("Launcher") != std::string::npos ||
+          proc.find("Browser") != std::string::npos ||
+          proc.find("Update") != std::string::npos ||
+          proc.find("ErrRep") != std::string::npos) {
+        return;
+      }
+
       static std::once_flag s_nte_mem_probe_flag;
       std::call_once(s_nte_mem_probe_flag, []() {
         std::thread([]() {

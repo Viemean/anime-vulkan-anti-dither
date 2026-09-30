@@ -605,9 +605,11 @@ extern "C" VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateInstance(
 
   game_core::init_config();
 
-  auto profile = game_core::get_active_profile();
-  if (profile && profile->on_device_created) {
-    profile->on_device_created(VK_NULL_HANDLE);
+  if (game_core::is_active()) {
+    auto profile = game_core::get_active_profile();
+    if (profile && profile->on_device_created) {
+      profile->on_device_created(VK_NULL_HANDLE);
+    }
   }
 
   return VK_SUCCESS;
