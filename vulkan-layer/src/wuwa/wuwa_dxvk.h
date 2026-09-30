@@ -547,20 +547,37 @@ namespace wuwa_dxvk {
           if (op1 < bound && op2 < bound && res_id < bound && is_in_demote_slice[res_id]) {
             bool op1_dither = is_dither_noise[op1];
             bool op2_dither = is_dither_noise[op2];
+            bool op1_sample = depends_on_sample[op1];
+            bool op2_sample = depends_on_sample[op2];
+            bool op1_frag = depends_on_frag_coord[op1];
+            bool op2_frag = depends_on_frag_coord[op2];
 
+            uint32_t survivor_op = 0;
             if (op1_dither ^ op2_dither) {
-              uint32_t survivor_op = op1_dither ? op2 : op1;
-              // Ensure survivor is a valid cutout, NOT a zero/negative clamp constant!
-              if (survivor_op < bound && !is_const_zero_or_neg[survivor_op]) {
-                spirv_code[i] = (4 << 16) | SPV_OP_COPY_OBJECT;
-                spirv_code[i + 3] = survivor_op;
-                for (uint16_t k = 4; k < length && (i + k) < word_count; ++k) {
-                  spirv_code[i + k] = (1 << 16) | SPV_OP_NOP;
-                }
-                demote_modified_count++;
-                nmin_uncoupled_count++;
-                is_dither_noise[res_id] = 0;
+              uint32_t cand = op1_dither ? op2 : op1;
+              // If candidate is a pure screen-space projection mask without texture sample, it is not a texture cutout
+              if (!(op1_dither ? (op2_frag && !op2_sample) : (op1_frag && !op1_sample))) {
+                survivor_op = cand;
               }
+            } else if (has_dither_signature) {
+              // Uncouple screen-space forehead/eyebrow projection mask from texture alpha in character materials
+              if (op1_sample && (!op2_sample && op2_frag)) {
+                survivor_op = op1;
+              } else if (op2_sample && (!op1_sample && op1_frag)) {
+                survivor_op = op2;
+              }
+            }
+
+            // Ensure survivor is a valid cutout, NOT a zero/negative clamp constant!
+            if (survivor_op > 0 && survivor_op < bound && !is_const_zero_or_neg[survivor_op]) {
+              spirv_code[i] = (4 << 16) | SPV_OP_COPY_OBJECT;
+              spirv_code[i + 3] = survivor_op;
+              for (uint16_t k = 4; k < length && (i + k) < word_count; ++k) {
+                spirv_code[i + k] = (1 << 16) | SPV_OP_NOP;
+              }
+              demote_modified_count++;
+              nmin_uncoupled_count++;
+              is_dither_noise[res_id] = 0;
             }
           }
         }

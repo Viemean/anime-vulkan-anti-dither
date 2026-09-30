@@ -623,6 +623,70 @@ void test_logger_rotation_and_retention() {
   std::cout << "PASSED\n";
 }
 
+void test_character_hair_forehead_mask_uncoupled() {
+  std::cout << "[Test 12] Character Hair Forehead Projection Mask Uncoupled from Texture Alpha... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  wuwa_layer::FloatUint ign_c;
+  ign_c.f = 0.06711056f;
+
+  std::vector<uint32_t> spv = {
+    wuwa_layer::SPV_HEADER_MAGIC,
+    0x00010300,
+    0,
+    100, // bound
+    0,
+    // OpDecorate %10 BuiltIn FragCoord
+    make_op(4, wuwa_layer::SPV_OP_DECORATE), 10, wuwa_layer::SPV_DECORATION_BUILTIN, wuwa_layer::SPV_BUILTIN_FRAG_COORD,
+    // IGN constant %50
+    make_op(4, wuwa_layer::SPV_OP_CONSTANT), 1, 50, ign_c.u,
+    // OpVariable %10
+    make_op(4, wuwa_layer::SPV_OP_VARIABLE), 1, 10, 1,
+    // OpFunction
+    make_op(5, wuwa_layer::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 20,
+    // OpLoad %11 from FragCoord %10 (depends on FragCoord, no sample)
+    make_op(4, wuwa_layer::SPV_OP_LOAD), 1, 11, 10,
+    // OpImageSampleImplicitLod %15 (depends on sample, no FragCoord)
+    make_op(5, 87), 1, 15, 2, 3,
+    // %20 = OpExtInst NMin (GLSL.std.450 79) %11 (FragCoord mask) %15 (Texture sample)
+    make_op(7, wuwa_layer::SPV_OP_EXT_INST), 1, 20, 200, 79, 11, 15,
+    // OpFOrdLessThan %25 %20 %50
+    make_op(5, 184), 6, 25, 20, 50,
+    make_op(4, wuwa_layer::SPV_OP_BRANCH_CONDITIONAL), 25, 30, 40,
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 30,
+    make_op(1, wuwa_layer::SPV_OP_KILL),
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, wuwa_layer::SPV_OP_FUNCTION_END)
+  };
+
+  wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
+
+  // Verify that %20 = OpExtInst NMin %11 %15 was uncoupled to OpCopyObject %15!
+  bool found_copy_object = false;
+  for (size_t i = 5; i < spv.size(); ) {
+    uint32_t w = spv[i];
+    uint16_t op = w & 0xFFFF;
+    uint16_t l = (w >> 16) & 0xFFFF;
+    if (l == 0 || (i + l) > spv.size()) break;
+    if (op == wuwa_layer::SPV_OP_COPY_OBJECT && l >= 4) {
+      if (spv[i + 2] == 20 && spv[i + 3] == 15) {
+        found_copy_object = true;
+      }
+    }
+    i += l;
+  }
+  if (!found_copy_object) {
+    std::cerr << "FAILED: Forehead mask was not uncoupled to pure texture sample %15!\n";
+    std::abort();
+  }
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Vulkan Anti-Dither SSA Unit Tests ===\n";
   test_camera_dither_fragcoord_kill();
@@ -636,6 +700,7 @@ int main() {
   test_foliage_dither_lod_with_alpha_cutout_preserved();
   test_dx11_real_world_shaders();
   test_logger_rotation_and_retention();
+  test_character_hair_forehead_mask_uncoupled();
   std::cout << "=== All Anti-Dither Tests Passed Successfully ===\n";
   return 0;
 }
