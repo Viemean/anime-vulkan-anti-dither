@@ -255,7 +255,7 @@ static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDrawIndexed(
     uint32_t                                    firstInstance) {
 
   if (__builtin_expect(game_core::g_active_skip_draw_indexed != nullptr, 0)) {
-    if (game_core::g_active_skip_draw_indexed(indexCount)) {
+    if (game_core::g_active_skip_draw_indexed(indexCount, firstIndex, vertexOffset)) {
       return;
     }
   }

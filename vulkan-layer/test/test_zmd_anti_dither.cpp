@@ -316,6 +316,8 @@ void test_zmd_dxvk_alpha_cutout_preserved() {
 void test_zmd_nomask_index_detection() {
   std::cout << "[Test ZMD 7] Administrator mask index count detection... ";
 
+  zmd_mod::reset_mod_state();
+
   // 默认情况下 4524 作为管理员主面具在所有 Pass 下无条件消除
   assert(zmd_mod::should_skip_mask_draw(0) == false);
   assert(zmd_mod::should_skip_mask_draw(4524) == true);
@@ -339,6 +341,33 @@ void test_zmd_nomask_index_detection() {
   assert(zmd_mod::should_skip_mask_draw(4524) == false);
   assert(zmd_mod::should_skip_mask_draw(139392) == false);
   assert(zmd_mod::should_skip_mask_draw(4524) == false);
+
+  // Vulkan 原生多线程/穿插调用保护验证:
+  // 在陈千语身体 (139392) 之后穿插 2 个无关微小 DrawCall (距离 3 <= 3)，4524 依然在滑窗保护范围内放行
+  assert(zmd_mod::should_skip_mask_draw(139392) == false);
+  assert(zmd_mod::should_skip_mask_draw(120) == false);
+  assert(zmd_mod::should_skip_mask_draw(240) == false);
+  assert(zmd_mod::should_skip_mask_draw(4524) == false);
+
+  // 跨角色隔离验证: 切换到管理员过程中，经过 4 个角色身体组件调用 (距离 >= 5)，4524 恢复为面具并消除
+  assert(zmd_mod::should_skip_mask_draw(139392) == false); // 上一个陈千语组件
+  assert(zmd_mod::should_skip_mask_draw(50000) == false);  // 管理员身体
+  assert(zmd_mod::should_skip_mask_draw(30000) == false);  // 管理员外套
+  assert(zmd_mod::should_skip_mask_draw(20000) == false);  // 管理员头发
+  assert(zmd_mod::should_skip_mask_draw(10000) == false);  // 管理员面部
+  assert(zmd_mod::should_skip_mask_draw(4524) == true);    // 管理员主面具必须消除！
+
+  // 管理员镜架 (117) 紧邻伴生锁定验证:
+  // 当伴随管理员镜架时，即使滑窗内残留陈千语特征，依然坚决判定为面具并消除
+  assert(zmd_mod::should_skip_mask_draw(117) == true);
+  assert(zmd_mod::should_skip_mask_draw(4524) == true);
+
+  // 滑窗淘汰恢复基线验证:
+  // 连续填充 10 个无关 DrawCall 冲刷滑窗，4524 恢复无条件消除基线行为
+  for (int i = 0; i < 10; ++i) {
+    zmd_mod::should_skip_mask_draw(9999);
+  }
+  assert(zmd_mod::should_skip_mask_draw(4524) == true);
 
   // 远景 LOD 与配件 (不受时序影响，直接判定)
   assert(zmd_mod::should_skip_mask_draw(2028) == true);

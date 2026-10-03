@@ -43,7 +43,7 @@ namespace game_core {
     void (*process_spirv)(uint32_t* code, size_t word_count) = nullptr;
 
     // 2. 命令级别绘制图元过滤 / 跳过 (如面具剔除、特效 Mesh 跳过)
-    bool (*should_skip_draw_indexed)(uint32_t index_count) = nullptr;
+    bool (*should_skip_draw_indexed)(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) = nullptr;
 
     // 3. 关联的 Addon 生命周期钩子 (如创建 Device 时启动异步线程 / 内存补丁)
     void (*on_device_created)(VkDevice device) = nullptr;
@@ -51,7 +51,7 @@ namespace game_core {
   };
 
   // 全局高频访问快速函数指针 (零开销内联，非目标游戏下冷分支开销为 0)
-  inline bool (*g_active_skip_draw_indexed)(uint32_t index_count) = nullptr;
+  inline bool (*g_active_skip_draw_indexed)(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) = nullptr;
 
   void init_game_profiles(std::string_view process_name);
   void reset_game_profiles_for_test();

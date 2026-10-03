@@ -120,9 +120,9 @@ namespace game_core {
       }
     }
 
-    bool on_zmd_should_skip_draw_indexed(uint32_t index_count) {
+    bool on_zmd_should_skip_draw_indexed(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) {
       if (game_logger::is_zmd_nomask_enabled()) {
-        return zmd_mod::should_skip_mask_draw(index_count);
+        return zmd_mod::should_skip_mask_draw(index_count, first_index, vertex_offset);
       }
       return false;
     }
