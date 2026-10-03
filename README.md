@@ -38,7 +38,7 @@
 | **崩坏3 (Honkai Impact 3rd)** | `BH3`, `HonkaiImpact3` | DXVK | 反虚化 |
 | **异环 (Neverness To Everness)** | `HTGame`, `HT-Win64` | DXVK / VKD3D | 反虚化、相机防裁剪补丁 |
 | **蓝色星原：旅谣 (Azur Promilia)** | `AzurPromilia`, `AP-Win64` | DXVK / VKD3D | 反虚化 |
-| **明日方舟：终末地 (Arknights: Endfield)**| `Endfield`, `zmd` | VKD3D / DXVK | 反虚化、管理员面具剔除 Mod |
+| **明日方舟：终末地 (Arknights: Endfield)**| `Endfield`, `zmd` | VKD3D / DXVK | 反虚化 |
 | **少女前线2：追放 (Girls' Frontline 2)** | `GF2_Exilium` | DXVK | 反虚化 |
 | **幻塔 (Tower of Fantasy)** | `QRSL`, `TowerOfFantasy` | DXVK / VKD3D | 反虚化 |
 | **二重螺旋 (Duet Night Abyss)** | `EM-Win64-Shipping`, `DNA` | DXVK / VKD3D | 反虚化，对游戏世界有一定破坏效果，会导致lod距离加载范围内树木变成卡片 |
@@ -59,7 +59,6 @@
 | `ANTI_DITHER_TARGETS` | 字符串 | 自定义目标进程识别关键字，多个以逗号分隔（如 `MyGame,TestApp`）。 |
 | `ANTI_DITHER_UNLOCK_FPS` | `1`, `0` | 米哈游游戏（原神、星铁）帧率限制解除开关。`1` 开启，`0` 关闭。 |
 | `ANTI_DITHER_TARGET_FPS` | 整数 | 目标帧率设定。`0` 表示不限帧，可选 `30` 以上为具体目标帧数（默认为 `120`）。 |
-| `zmd_nomask` | `1`, `0` | 《明日方舟：终末地》管理员面具剔除 Mod。`1` 开启，`0` 关闭。 |
 
 ### 5.2 开发与诊断变量
 

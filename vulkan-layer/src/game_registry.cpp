@@ -9,7 +9,6 @@
 #include "nte/nte_anti_dither.h"
 #include "azur_promilia/azur_promilia_anti_dither.h"
 #include "zmd/zmd_anti_dither.h"
-#include "zmd/zmd_mod.h"
 #include "gf2/gf2_anti_dither.h"
 #include "tof/tof_anti_dither.h"
 #include "dna/dna_anti_dither.h"
@@ -120,12 +119,6 @@ namespace game_core {
       }
     }
 
-    bool on_zmd_should_skip_draw_indexed(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) {
-      if (game_logger::is_zmd_nomask_enabled()) {
-        return zmd_mod::should_skip_mask_draw(index_count, first_index, vertex_offset);
-      }
-      return false;
-    }
 
     // --------------------------------------------------------------------------
     // 静态注册表定义
@@ -199,7 +192,7 @@ namespace game_core {
         "Arknights: Endfield",
         kKeywordsZMD,
         zmd_layer::process_spirv_anti_dither,
-        on_zmd_should_skip_draw_indexed,
+        nullptr,
         nullptr,
         nullptr
       },

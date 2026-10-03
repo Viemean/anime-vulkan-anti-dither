@@ -114,12 +114,7 @@ void test_generic_mod_framework() {
   game_logger::g_initialized = false;
   assert(game_logger::is_mod_enabled("test_custom_mod") == true);
 
-  // 5. 既有特化门面等价性验证
   unsetenv("TEST_CUSTOM_MOD");
-  setenv("ZMD_NOMASK", "1", 1);
-  game_logger::g_initialized = false;
-  assert(game_logger::is_zmd_nomask_enabled() == true);
-  unsetenv("ZMD_NOMASK");
   game_logger::g_initialized = false;
 
   std::cout << "PASSED\n";

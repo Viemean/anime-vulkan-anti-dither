@@ -132,8 +132,6 @@ namespace game_core {
           int32_t parsed_fps = std::stoi(val);
           g_target_fps = (parsed_fps == 0 || parsed_fps == -1) ? 0 : ((parsed_fps < 30) ? 30 : parsed_fps);
         } catch (...) {}
-      } else if (key == "zmd_nomask" || key == "zmd_no_mask" || key == "nomask") {
-        g_mod_toggles["zmd_nomask"] = (val == "1" || val == "true" || val == "on");
       } else {
         bool is_true = (val == "1" || val == "true" || val == "yes" || val == "on");
         bool is_false = (val == "0" || val == "false" || val == "no" || val == "off");
@@ -282,10 +280,10 @@ namespace game_core {
 
     std::string key(mod_name);
 
-    // 1. 环境变量优先级最高: 先查原始/小写名称 (如 zmd_nomask)
+    // 1. 环境变量优先级最高: 先查原始/小写名称 (如 custom_mod)
     const char* env_val = std::getenv(key.c_str());
     if (!env_val) {
-      // 2. 查全大写名称 (如 ZMD_NOMASK)
+      // 2. 查全大写名称 (如 CUSTOM_MOD)
       std::string upper_key = key;
       for (char& c : upper_key) {
         c = static_cast<char>(::toupper(static_cast<unsigned char>(c)));

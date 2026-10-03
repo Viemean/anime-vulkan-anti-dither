@@ -48,7 +48,6 @@ namespace game_logger {
   using game_core::get_target_fps;
   using game_core::get_effective_engine_fps;
   using game_core::is_mod_enabled;
-  using game_core::is_zmd_nomask_enabled;
 
   // 各游戏专属状态查询
   using game_core::is_nte;

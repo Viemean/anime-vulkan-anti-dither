@@ -7,7 +7,6 @@
 #include "../src/logger.h"
 #include "../src/zmd/zmd_anti_dither.h"
 #include "../src/zmd/zmd_vulkan.h"
-#include "../src/zmd/zmd_mod.h"
 
 static inline uint32_t make_op(uint16_t length, uint16_t opcode) {
   return (static_cast<uint32_t>(length) << 16) | opcode;
@@ -312,110 +311,6 @@ void test_zmd_dxvk_alpha_cutout_preserved() {
   std::cout << "PASSED\n";
 }
 
-// 用例 7: 管理员面具 (Mask) 索引特征识别验证
-void test_zmd_nomask_index_detection() {
-  std::cout << "[Test ZMD 7] Administrator mask index count detection... ";
-
-  zmd_mod::reset_mod_state();
-
-  // 默认情况下 4524 作为管理员主面具在所有 Pass 下无条件消除
-  assert(zmd_mod::should_skip_mask_draw(0) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == true);
-  assert(zmd_mod::should_skip_mask_draw(9000) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == true);
-  assert(zmd_mod::should_skip_mask_draw(27615) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == true);
-  assert(zmd_mod::should_skip_mask_draw(12345) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == true);
-
-  // 陈千语专属特征保护门禁: 紧随陈千语 Submesh (888, 714, 9477, 15138, 46728, 139392) 的 4524 必须保护放行
-  assert(zmd_mod::should_skip_mask_draw(888) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == false);
-  assert(zmd_mod::should_skip_mask_draw(714) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == false);
-  assert(zmd_mod::should_skip_mask_draw(9477) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == false);
-  assert(zmd_mod::should_skip_mask_draw(15138) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == false);
-  assert(zmd_mod::should_skip_mask_draw(46728) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == false);
-  assert(zmd_mod::should_skip_mask_draw(139392) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == false);
-
-  // Vulkan 原生多线程/穿插调用保护验证:
-  // 在陈千语身体 (139392) 之后穿插 2 个无关微小 DrawCall (距离 3 <= 3)，4524 依然在滑窗保护范围内放行
-  assert(zmd_mod::should_skip_mask_draw(139392) == false);
-  assert(zmd_mod::should_skip_mask_draw(120) == false);
-  assert(zmd_mod::should_skip_mask_draw(240) == false);
-  assert(zmd_mod::should_skip_mask_draw(4524) == false);
-
-  // 跨角色隔离验证: 切换到管理员过程中，经过 4 个角色身体组件调用 (距离 >= 5)，4524 恢复为面具并消除
-  assert(zmd_mod::should_skip_mask_draw(139392) == false); // 上一个陈千语组件
-  assert(zmd_mod::should_skip_mask_draw(50000) == false);  // 管理员身体
-  assert(zmd_mod::should_skip_mask_draw(30000) == false);  // 管理员外套
-  assert(zmd_mod::should_skip_mask_draw(20000) == false);  // 管理员头发
-  assert(zmd_mod::should_skip_mask_draw(10000) == false);  // 管理员面部
-  assert(zmd_mod::should_skip_mask_draw(4524) == true);    // 管理员主面具必须消除！
-
-  // 管理员镜架 (117) 紧邻伴生锁定验证:
-  // 当伴随管理员镜架时，即使滑窗内残留陈千语特征，依然坚决判定为面具并消除
-  assert(zmd_mod::should_skip_mask_draw(117) == true);
-  assert(zmd_mod::should_skip_mask_draw(4524) == true);
-
-  // 滑窗淘汰恢复基线验证:
-  // 连续填充 10 个无关 DrawCall 冲刷滑窗，4524 恢复无条件消除基线行为
-  for (int i = 0; i < 10; ++i) {
-    zmd_mod::should_skip_mask_draw(9999);
-  }
-  assert(zmd_mod::should_skip_mask_draw(4524) == true);
-
-  // 远景 LOD 与配件 (不受时序影响，直接判定)
-  assert(zmd_mod::should_skip_mask_draw(2028) == true);
-  assert(zmd_mod::should_skip_mask_draw(117) == true);
-  assert(zmd_mod::should_skip_mask_draw(69) == true);
-  assert(zmd_mod::should_skip_mask_draw(51) == true);
-
-  // 非面具网格必须全部保留 (返回 false)
-  assert(zmd_mod::should_skip_mask_draw(0) == false);
-  assert(zmd_mod::should_skip_mask_draw(100) == false);
-  assert(zmd_mod::should_skip_mask_draw(116) == false);
-  assert(zmd_mod::should_skip_mask_draw(118) == false);
-  assert(zmd_mod::should_skip_mask_draw(2027) == false);
-  assert(zmd_mod::should_skip_mask_draw(2029) == false);
-  assert(zmd_mod::should_skip_mask_draw(4523) == false);
-  assert(zmd_mod::should_skip_mask_draw(4525) == false);
-  assert(zmd_mod::should_skip_mask_draw(12000) == false);
-
-  std::cout << "PASSED\n";
-}
-
-// 用例 8: zmd_nomask 环境变量开关与覆盖逻辑验证
-void test_zmd_nomask_env_toggle() {
-  std::cout << "[Test ZMD 8] zmd_nomask environment toggle... ";
-
-  // 1. 测试显式启用 zmd_nomask=1
-  setenv("zmd_nomask", "1", 1);
-  game_logger::g_initialized = false;
-  assert(game_logger::is_zmd_nomask_enabled() == true);
-
-  // 2. 测试显式禁用 zmd_nomask=0
-  setenv("zmd_nomask", "0", 1);
-  game_logger::g_initialized = false;
-  assert(game_logger::is_zmd_nomask_enabled() == false);
-
-  // 3. 测试大写 ZMD_NOMASK=1 兼容性
-  unsetenv("zmd_nomask");
-  setenv("ZMD_NOMASK", "1", 1);
-  game_logger::g_initialized = false;
-  assert(game_logger::is_zmd_nomask_enabled() == true);
-
-  // 清理测试环境
-  unsetenv("ZMD_NOMASK");
-  game_logger::g_initialized = false;
-
-  std::cout << "PASSED\n";
-}
-
 int main() {
   std::cout << "=== Arknights: Endfield (ZMD / Vulkan & DXVK) Anti-Dither Unit Tests ===\n";
   test_zmd_pipeline_stage_dispatch();
@@ -424,8 +319,6 @@ int main() {
   test_zmd_dxvk_backend_detection();
   test_zmd_dxvk_character_dither_neutralized();
   test_zmd_dxvk_alpha_cutout_preserved();
-  test_zmd_nomask_index_detection();
-  test_zmd_nomask_env_toggle();
   std::cout << "=== All ZMD Tests Passed Successfully ===\n";
   return 0;
 }
