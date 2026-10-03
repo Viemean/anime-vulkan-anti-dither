@@ -1,5 +1,6 @@
 project('wuwa_vulkan_layer', 'cpp',
   version : '1.0.0',
+  license : 'MIT',
   meson_version : '>= 1.1.0',
   default_options : [
     'warning_level=2',
