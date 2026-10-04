@@ -38,7 +38,7 @@
 | **崩坏3 (Honkai Impact 3rd)** | `BH3`, `HonkaiImpact3` | DXVK | 反虚化 |
 | **异环 (Neverness To Everness)** | `HTGame`, `HT-Win64` | DXVK / VKD3D | 反虚化、相机防裁剪补丁 |
 | **蓝色星原：旅谣 (Azur Promilia)** | `AzurPromilia`, `AP-Win64` | DXVK / VKD3D | 反虚化 |
-| **明日方舟：终末地 (Arknights: Endfield)**| `Endfield`, `zmd` | VKD3D / DXVK | 反虚化 |
+| **明日方舟：终末地 (Arknights: Endfield)**| `Endfield`, `zmd` | VULKAN / DXVK | 反虚化 |
 | **少女前线2：追放 (Girls' Frontline 2)** | `GF2_Exilium` | DXVK | 反虚化 |
 | **幻塔 (Tower of Fantasy)** | `QRSL`, `TowerOfFantasy` | DXVK / VKD3D | 反虚化 |
 | **二重螺旋 (Duet Night Abyss)** | `EM-Win64-Shipping`, `DNA` | DXVK / VKD3D | 反虚化，对游戏世界有一定破坏效果，会导致lod距离加载范围内树木变成卡片 |
