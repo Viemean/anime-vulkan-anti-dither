@@ -555,8 +555,10 @@ namespace wuwa_dxvk {
             uint32_t survivor_op = 0;
             if (op1_dither ^ op2_dither) {
               uint32_t cand = op1_dither ? op2 : op1;
-              // If candidate is a pure screen-space projection mask without texture sample, it is not a texture cutout
-              if (!(op1_dither ? (op2_frag && !op2_sample) : (op1_frag && !op1_sample))) {
+              bool cand_sample = op1_dither ? op2_sample : op1_sample;
+              bool cand_dither = op1_dither ? op2_dither : op1_dither;
+              // Only uncouple when candidate is a genuine texture alpha cutout, never scalar clamp constants
+              if (cand_sample && !cand_dither) {
                 survivor_op = cand;
               }
             } else if (has_dither_signature) {

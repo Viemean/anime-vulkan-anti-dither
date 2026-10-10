@@ -687,6 +687,91 @@ void test_character_hair_forehead_mask_uncoupled() {
   std::cout << "PASSED\n";
 }
 
+void test_scene_holographic_building_nmin_scalar_preserved() {
+  std::cout << "Test 13: Scene Holographic Building NMin scalar clamp preserved (Prevents Bloom explosion)... ";
+
+  wuwa_layer::FloatUint f_one;
+  f_one.f = 1.0f;
+  wuwa_layer::FloatUint f_thresh;
+  f_thresh.f = 0.5f;
+
+  std::vector<uint32_t> spv = {
+    wuwa_layer::SPV_HEADER_MAGIC,
+    0x00010300,
+    0,
+    100, // bound
+    0,
+    // OpDecorate %10 BuiltIn FragCoord
+    make_op(4, wuwa_layer::SPV_OP_DECORATE), 10, wuwa_layer::SPV_DECORATION_BUILTIN, wuwa_layer::SPV_BUILTIN_FRAG_COORD,
+    // OpConstant %float_1
+    make_op(4, wuwa_layer::SPV_OP_CONSTANT), 1, 50, f_one.u,
+    make_op(4, wuwa_layer::SPV_OP_CONSTANT), 1, 51, f_thresh.u,
+    make_op(4, wuwa_layer::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, wuwa_layer::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 20,
+    make_op(4, wuwa_layer::SPV_OP_LOAD), 1, 11, 10,
+    // Dither derivation from FragCoord
+    make_op(5, 133), 1, 12, 11, 50, // FMul
+    // %15 = NMin %float_1 %12 (op1 is constant 1.0f! op2 is dither)
+    make_op(7, wuwa_layer::SPV_OP_EXT_INST), 1, 15, 200, 79, 50, 12,
+    // %16 = FOrdLessThan %15 %51
+    make_op(5, 184), 6, 16, 15, 51,
+    make_op(4, wuwa_layer::SPV_OP_BRANCH_CONDITIONAL), 16, 30, 40,
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 30,
+    make_op(1, wuwa_layer::SPV_OP_KILL),
+    make_op(2, wuwa_layer::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, wuwa_layer::SPV_OP_FUNCTION_END)
+  };
+
+  wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
+
+  // Ensure NMin is NOT uncoupled to OpCopyObject %float_1
+  for (size_t i = 5; i < spv.size(); ) {
+    uint32_t w = spv[i];
+    uint16_t op = w & 0xFFFF;
+    uint16_t l = (w >> 16) & 0xFFFF;
+    if (l == 0 || (i + l) > spv.size()) break;
+    if (op == wuwa_layer::SPV_OP_COPY_OBJECT) {
+      std::cerr << "FAILED: NMin with scalar 1.0f constant was wrongly uncoupled to OpCopyObject!\n";
+      std::abort();
+    }
+    i += l;
+  }
+
+  auto load_spv = [](const std::string& path) -> std::vector<uint32_t> {
+    if (!std::filesystem::exists(path)) return {};
+    auto size = std::filesystem::file_size(path);
+    if (size < 20 || (size % 4) != 0) return {};
+    std::ifstream f(path, std::ios::binary);
+    std::vector<uint32_t> buf(size / sizeof(uint32_t));
+    f.read(reinterpret_cast<char*>(buf.data()), size);
+    return buf;
+  };
+
+  // Test transparent clothes shader 0x68a90d8f
+  std::string clothes_path = "/tmp/game_anti_dither/dumps/Client-Win64-Shipping/shader_68a90d8f_orig.spv";
+  std::vector<uint32_t> clothes_spv = load_spv(clothes_path);
+  if (!clothes_spv.empty()) {
+    std::vector<uint32_t> clothes_copy = clothes_spv;
+    wuwa_layer::process_spirv_anti_dither(clothes_copy.data(), clothes_copy.size());
+    // Verify that NMin %float_1 was NOT uncoupled to OpCopyObject %float_1
+    for (size_t i = 5; i < clothes_copy.size(); ) {
+      uint32_t w = clothes_copy[i];
+      uint16_t op = w & 0xFFFF;
+      uint16_t l = (w >> 16) & 0xFFFF;
+      if (l == 0 || (i + l) > clothes_copy.size()) break;
+      if (op == wuwa_layer::SPV_OP_COPY_OBJECT) {
+        std::cerr << "FAILED: Clothes shader 0x68a90d8f had NMin incorrectly uncoupled to OpCopyObject!\n";
+        std::abort();
+      }
+      i += l;
+    }
+  }
+
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Vulkan Anti-Dither SSA Unit Tests ===\n";
   test_camera_dither_fragcoord_kill();
@@ -701,6 +786,7 @@ int main() {
   test_dx11_real_world_shaders();
   test_logger_rotation_and_retention();
   test_character_hair_forehead_mask_uncoupled();
+  test_scene_holographic_building_nmin_scalar_preserved();
   std::cout << "=== All Anti-Dither Tests Passed Successfully ===\n";
   return 0;
 }
