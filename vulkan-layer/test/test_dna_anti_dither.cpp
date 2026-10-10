@@ -1,3 +1,4 @@
+#include "test_utils.h"
 #include <cstdint>
 #include <vector>
 #include <iostream>
@@ -131,9 +132,9 @@ void test_dna_tree_foliage_alpha_cutout_preserved() {
 
 // 用例 3: 实机转储着色器基准对照组验证
 void test_dna_real_dump_benchmarks() {
-  std::string dir = "/tmp/game_anti_dither/dumps/EM-Win64-Shipping";
+  std::string dir = test_utils::get_game_dump_path("EM-Win64-Shipping");
   if (!fs::exists(dir)) {
-    dir = "/tmp/game_anti_dither/dumps/EM-Win64-Shipping.1";
+    dir = test_utils::get_game_dump_path("EM-Win64-Shipping.1");
   }
   if (!fs::exists(dir)) {
     std::cout << "[Test DNA 3] Real dumps directory not present, skipping benchmark.\n";
@@ -480,7 +481,7 @@ void test_dna_dxvk_real_face_and_impostor_tree() {
   game_logger::g_exclude_hashes.clear();
   game_logger::g_force_hashes.clear();
 
-  std::string dir = "/tmp/game_anti_dither/dumps/EM-Win64-Shipping";
+  std::string dir = test_utils::get_game_dump_path("EM-Win64-Shipping");
   auto test_dump_shader = [&](const std::string& h, uint32_t expected_before, uint32_t expected_after) {
     std::string path = dir + "/shader_" + h + "_orig.spv";
     if (!fs::exists(path)) return;

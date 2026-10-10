@@ -1,3 +1,4 @@
+#include "test_utils.h"
 #include <cstdint>
 #include <vector>
 #include <iostream>
@@ -110,8 +111,8 @@ void test_nte_tree_foliage_alpha_cutout_preserved() {
 
   nte_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
   // 校验实机导出的树木材质着色器 (shader_6e6fa990)
-  const char* tree_path = "/tmp/game_anti_dither/dumps/HTGame/shader_6e6fa990_orig.spv";
-  FILE* fp_tree = std::fopen(tree_path, "rb");
+  std::string tree_path = test_utils::get_game_dump_path("HTGame", "shader_6e6fa990_orig.spv");
+  FILE* fp_tree = std::fopen(tree_path.c_str(), "rb");
   if (fp_tree) {
     std::fseek(fp_tree, 0, SEEK_END);
     size_t tree_bytes = std::ftell(fp_tree);
@@ -232,8 +233,8 @@ void test_nte_pipeline_stage_dispatch() {
 // 用例 5: 实机抓取的 UE 5.5 真实蓝噪声着色器验证 (shader_39827d15)
 void test_nte_real_world_dump_shader() {
   std::cout << "[Test NTE 5] Real-world UE 5.5 Blue Noise Shader (shader_39827d15)... ";
-  const char* path = "/tmp/game_anti_dither/dumps/HTGame/shader_39827d15_orig.spv";
-  FILE* fp = std::fopen(path, "rb");
+  std::string path = test_utils::get_game_dump_path("HTGame", "shader_39827d15_orig.spv");
+  FILE* fp = std::fopen(path.c_str(), "rb");
   if (!fp) {
     std::cout << "SKIPPED (dump file not found)\n";
     return;
@@ -268,8 +269,8 @@ void test_nte_real_world_dump_shader() {
   }
 
   // 测试 shader 2: shader_6befdec4
-  const char* path2 = "/tmp/game_anti_dither/dumps/HTGame/shader_6befdec4_orig.spv";
-  FILE* fp2 = std::fopen(path2, "rb");
+  std::string path2 = test_utils::get_game_dump_path("HTGame", "shader_6befdec4_orig.spv");
+  FILE* fp2 = std::fopen(path2.c_str(), "rb");
   if (fp2) {
     std::fseek(fp2, 0, SEEK_END);
     size_t bytes2 = std::ftell(fp2);
@@ -296,8 +297,8 @@ void test_nte_real_world_dump_shader() {
   }
 
   // 测试 shader 3: shader_5ef97b1b (角色网点虚化，预期置为 NOP)
-  const char* path3 = "/tmp/game_anti_dither/dumps/HTGame/shader_5ef97b1b_orig.spv";
-  FILE* fp3 = std::fopen(path3, "rb");
+  std::string path3 = test_utils::get_game_dump_path("HTGame", "shader_5ef97b1b_orig.spv");
+  FILE* fp3 = std::fopen(path3.c_str(), "rb");
   if (fp3) {
     std::fseek(fp3, 0, SEEK_END);
     size_t bytes3 = std::ftell(fp3);
@@ -317,8 +318,8 @@ void test_nte_real_world_dump_shader() {
   }
 
   // 测试 shader 4: shader_c66cdd66 (植被贴图 Alpha 镂空，预期保留)
-  const char* path4 = "/tmp/game_anti_dither/dumps/HTGame/shader_c66cdd66_orig.spv";
-  FILE* fp4 = std::fopen(path4, "rb");
+  std::string path4 = test_utils::get_game_dump_path("HTGame", "shader_c66cdd66_orig.spv");
+  FILE* fp4 = std::fopen(path4.c_str(), "rb");
   if (fp4) {
     std::fseek(fp4, 0, SEEK_END);
     size_t bytes4 = std::ftell(fp4);
@@ -338,8 +339,8 @@ void test_nte_real_world_dump_shader() {
   }
 
   // 测试 shader 5: shader_1cb6512d (包围盒深度裁剪，预期保留)
-  const char* path5 = "/tmp/game_anti_dither/dumps/HTGame/shader_1cb6512d_orig.spv";
-  FILE* fp5 = std::fopen(path5, "rb");
+  std::string path5 = test_utils::get_game_dump_path("HTGame", "shader_1cb6512d_orig.spv");
+  FILE* fp5 = std::fopen(path5.c_str(), "rb");
   if (fp5) {
     std::fseek(fp5, 0, SEEK_END);
     size_t bytes5 = std::ftell(fp5);
@@ -359,8 +360,8 @@ void test_nte_real_world_dump_shader() {
   }
 
   // 测试 shader 6: shader_80ad1235 (大世界植被着色器，保持原样放行)
-  const char* path6 = "/tmp/game_anti_dither/dumps/HTGame/shader_80ad1235_orig.spv";
-  FILE* fp6 = std::fopen(path6, "rb");
+  std::string path6 = test_utils::get_game_dump_path("HTGame", "shader_80ad1235_orig.spv");
+  FILE* fp6 = std::fopen(path6.c_str(), "rb");
   if (fp6) {
     std::fseek(fp6, 0, SEEK_END);
     size_t bytes6 = std::ftell(fp6);
@@ -380,8 +381,8 @@ void test_nte_real_world_dump_shader() {
   }
 
   // 测试 shader 7: shader_6d741986 (角色网点着色器，预期置为 NOP)
-  const char* path7 = "/tmp/game_anti_dither/dumps/HTGame/shader_6d741986_orig.spv";
-  FILE* fp7 = std::fopen(path7, "rb");
+  std::string path7 = test_utils::get_game_dump_path("HTGame", "shader_6d741986_orig.spv");
+  FILE* fp7 = std::fopen(path7.c_str(), "rb");
   if (fp7) {
     std::fseek(fp7, 0, SEEK_END);
     size_t bytes7 = std::ftell(fp7);
@@ -401,8 +402,8 @@ void test_nte_real_world_dump_shader() {
   }
 
   // 测试 shader 8: shader_dc232b9a (角色眼眶贴花遮罩，预期保留)
-  const char* path8 = "/tmp/game_anti_dither/dumps/HTGame/shader_dc232b9a_orig.spv";
-  FILE* fp8 = std::fopen(path8, "rb");
+  std::string path8 = test_utils::get_game_dump_path("HTGame", "shader_dc232b9a_orig.spv");
+  FILE* fp8 = std::fopen(path8.c_str(), "rb");
   if (fp8) {
     std::fseek(fp8, 0, SEEK_END);
     size_t bytes8 = std::ftell(fp8);

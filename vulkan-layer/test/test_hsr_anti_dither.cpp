@@ -1,3 +1,4 @@
+#include "test_utils.h"
 #include <cstdint>
 #include <vector>
 #include <iostream>
@@ -167,7 +168,8 @@ void test_hsr_alpha_cutout_preserved() {
 void test_hsr_real_shader_dump_neutralized() {
   std::cout << "[Test HSR 4] Real Dumped Shader (shader_a4b7eb69) Bayer Demote neutralized & Cutouts preserved... ";
 
-  const char* dump_path = "/tmp/game_anti_dither/dumps/StarRail/shader_a4b7eb69_orig.spv";
+  std::string dump_path_str = test_utils::get_game_dump_path("StarRail", "shader_a4b7eb69_orig.spv");
+  const char* dump_path = dump_path_str.c_str();
   FILE* fp = fopen(dump_path, "rb");
   if (!fp) {
     std::cout << "SKIPPED (no dump file)\n";
@@ -218,7 +220,8 @@ void test_hsr_real_shader_dump_neutralized() {
 void test_hsr_flower_shader_cutout_preserved() {
   std::cout << "[Test HSR 5] Flower Shader (shader_0b4aa2b5) Petal Alpha 镂空s preserved... ";
 
-  const char* dump_path = "/tmp/game_anti_dither/dumps/StarRail/shader_0b4aa2b5_orig.spv";
+  std::string dump_path_str = test_utils::get_game_dump_path("StarRail", "shader_0b4aa2b5_orig.spv");
+  const char* dump_path = dump_path_str.c_str();
   FILE* fp = fopen(dump_path, "rb");
   if (!fp) {
     std::cout << "SKIPPED (no dump file)\n";
@@ -307,7 +310,8 @@ void test_hsr_vertex_shader_collapse_neutralized() {
 void test_hsr_real_vertex_shader_dump_neutralized() {
   std::cout << "[Test HSR 7] Real Dumped Vertex Shader (shader_vs_f5f22a59) Collapses Neutralized... ";
 
-  const char* dump_path = "/tmp/game_anti_dither/dumps/StarRail/shader_vs_f5f22a59_fs_69e2c521.spv";
+  std::string dump_path_str = test_utils::get_game_dump_path("StarRail", "shader_vs_f5f22a59_fs_69e2c521.spv");
+  const char* dump_path = dump_path_str.c_str();
   FILE* fp = fopen(dump_path, "rb");
   if (!fp) {
     std::cout << "SKIPPED (no dump file)\n";

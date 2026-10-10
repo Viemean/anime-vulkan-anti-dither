@@ -1,3 +1,4 @@
+#include "test_utils.h"
 #include <cstdint>
 #include <vector>
 #include <iostream>
@@ -124,9 +125,9 @@ void test_tof_tree_foliage_alpha_cutout_preserved() {
 
 // 用例 3: 实机转储着色器基准对照组验证（若存在 dump 目录则触发）
 void test_tof_real_dump_benchmarks() {
-  std::string dir = "/tmp/game_anti_dither/dumps/QRSL";
+  std::string dir = test_utils::get_game_dump_path("QRSL");
   if (!fs::exists(dir)) {
-    dir = "/tmp/game_anti_dither/dumps/QRSL.1";
+    dir = test_utils::get_game_dump_path("QRSL.1");
   }
   if (!fs::exists(dir)) {
     std::cout << "[Test TOF 3] Real dumps directory not present, skipping benchmark.\n";

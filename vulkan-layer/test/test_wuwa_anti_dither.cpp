@@ -1,3 +1,4 @@
+#include "test_utils.h"
 #include "../src/wuwa/wuwa_anti_dither.h"
 #include "../src/azur_promilia/azur_promilia_anti_dither.h"
 #include <cassert>
@@ -486,7 +487,7 @@ void test_dx11_real_world_shaders() {
     return spv;
   };
 
-  std::string dump_dir = "/tmp/game_anti_dither/dumps/Client-Win64-Shipping/";
+  std::string dump_dir = test_utils::get_game_dump_path("Client-Win64-Shipping") + "/";
 
   // 1. Chisa Close-up (0x5c1ec349): NMin uncoupled to OpCopyObject, Demote neutralized to OpNop
   {
@@ -566,8 +567,8 @@ void test_logger_rotation_and_retention() {
   std::cout << "[Test 11] Logger and Dump 3-Run Rotation Retention... ";
   namespace fs = std::filesystem;
   std::error_code ec;
-  std::string test_log_base = "/tmp/test_anti_dither_rotation.log";
-  std::string test_dump_base = "/tmp/test_anti_dither_dump_rotation";
+  std::string test_log_base = test_utils::get_temp_test_path("test_anti_dither_rotation.log");
+  std::string test_dump_base = test_utils::get_temp_test_path("test_anti_dither_dump_rotation");
 
   // 清理测试环境
   for (int i = 0; i <= 5; ++i) {
@@ -750,7 +751,7 @@ void test_scene_holographic_building_nmin_scalar_preserved() {
   };
 
   // Test transparent clothes shader 0x68a90d8f
-  std::string clothes_path = "/tmp/game_anti_dither/dumps/Client-Win64-Shipping/shader_68a90d8f_orig.spv";
+  std::string clothes_path = test_utils::get_game_dump_path("Client-Win64-Shipping", "shader_68a90d8f_orig.spv");
   std::vector<uint32_t> clothes_spv = load_spv(clothes_path);
   if (!clothes_spv.empty()) {
     std::vector<uint32_t> clothes_copy = clothes_spv;

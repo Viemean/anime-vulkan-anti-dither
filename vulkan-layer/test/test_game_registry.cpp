@@ -61,13 +61,12 @@ void test_anti_false_positive_matching() {
     "Starfield.exe",
     "starship.exe",
 
-    // 2. GEMINI 或含有 EM 的路径不能误伤为 DNA (二重螺旋)
-    "/home/yuzuki/.gemini/antigravity/tools/my_test_tool.exe",
+    // 2. 含有 EM 的路径不能误伤为 DNA (二重螺旋)
     "C:\\Windows\\System32\\remoteproc.exe",
     "element_render.exe",
 
     // 3. 启动器与辅助工具不能误伤为 NTE / ZMD / TOF / ZZZ
-    "/mnt/HDD/Games/NTE/Neverness To Everness/NTELauncher.exe",
+    "/NTE/Neverness To Everness/NTELauncher.exe",
     "NTELauncher.exe",
     "NTEBrowser.exe",
     "zmd_extract_tool.exe",

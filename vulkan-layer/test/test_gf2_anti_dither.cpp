@@ -1,3 +1,4 @@
+#include "test_utils.h"
 #include <cstdint>
 #include <vector>
 #include <iostream>
@@ -375,11 +376,11 @@ void test_gf2_real_dumped_shaders() {
 
   // 1. 验证角色着色器 (身体、衣物、帽子、长发与面部)
   const std::vector<std::string> character_shaders = {
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_df632a08_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_cb71d78c_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_5aaedcf6_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_b81e8680_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_f15414fb_orig.spv"
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_df632a08_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_cb71d78c_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_5aaedcf6_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_b81e8680_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_f15414fb_orig.spv")
   };
 
   for (const auto& spv_path : character_shaders) {
@@ -414,16 +415,16 @@ void test_gf2_real_dumped_shaders() {
 
   // 2. 验证环境与植物树木着色器 (包括地面小草，以及高面数的大树、盆栽棕榈叶片等)
   const std::vector<std::string> foliage_shaders = {
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_e60c0263_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_479860b5_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_0d8e27cd_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_705cb07f_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_1cd48a26_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_008c2ad9_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_6bc8dc52_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_d41324a4_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_d4bfc247_orig.spv",
-    "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_8e576181_orig.spv"
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_e60c0263_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_479860b5_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_0d8e27cd_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_705cb07f_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_1cd48a26_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_008c2ad9_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_6bc8dc52_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_d41324a4_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_d4bfc247_orig.spv"),
+    test_utils::get_game_dump_path("GF2_Exilium", "shader_8e576181_orig.spv")
   };
 
   for (const auto& spv_path : foliage_shaders) {
@@ -462,7 +463,7 @@ void test_gf2_real_dumped_shaders() {
 void test_gf2_stripped_debug_info_fallback() {
   std::cout << "[Test GF2 8] Stripped Debug Info Fallback (OpName stripped, cb2 via Binding)... ";
 
-  const std::string spv_path = "/tmp/game_anti_dither/dumps/GF2_Exilium/shader_df632a08_orig.spv";
+  const std::string spv_path = test_utils::get_game_dump_path("GF2_Exilium", "shader_df632a08_orig.spv");
   auto code = load_spv_file(spv_path);
   if (code.empty()) {
     std::cout << "SKIPPED (dump file not found)\n";
