@@ -107,9 +107,9 @@ void test_hsr_bayer_dither_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 3: 非 Bayer 材质 Alpha Cutout 100% 保护（不含 17.0f，Demote 完整保留）
+// 用例 3: 非 Bayer 材质 Alpha 镂空 保护验证 (Demote 保持保留)
 void test_hsr_alpha_cutout_preserved() {
-  std::cout << "[Test HSR 3] Alpha Cutout without Bayer constant (Preserved 100%)... ";
+  std::cout << "[Test HSR 3] Alpha 镂空 without Bayer constant (Preserved 100%)... ";
 
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
@@ -128,7 +128,7 @@ void test_hsr_alpha_cutout_preserved() {
     0,
     100,
     0,
-    // OpConstant %50 (0.5f Cutout threshold)
+    // OpConstant %50 (0.5f 镂空阈值)
     make_op(4, 43 /* OpConstant */), 1, 50, f_alpha.u,
     // OpFunction
     make_op(5, 54 /* OpFunction */), 2, 1, 0, 3,
@@ -139,7 +139,7 @@ void test_hsr_alpha_cutout_preserved() {
     make_op(4, 250 /* OpBranchConditional */), 70, 30, 40,
     // OpLabel %30
     make_op(2, 248 /* OpLabel */), 30,
-    // OpDemoteToHelperInvocation (非 Bayer，绝不能被 NOP)
+    // OpDemoteToHelperInvocation (非 Bayer 特征，预期保留)
     make_op(1, hsr_dxvk::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
     // OpLabel %40
     make_op(2, 248 /* OpLabel */), 40,
@@ -214,9 +214,9 @@ void test_hsr_real_shader_dump_neutralized() {
   std::cout << "PASSED (1 Bayer NOPed, 3 Cutouts Preserved)\n";
 }
 
-// 用例 5: 大世界花朵/植被着色器 (shader_0b4aa2b5) 材质 Alpha Cutout 100% 保护验证
+// 用例 5: 大世界植被着色器 (shader_0b4aa2b5) 材质 Alpha 镂空 保护验证
 void test_hsr_flower_shader_cutout_preserved() {
-  std::cout << "[Test HSR 5] Flower Shader (shader_0b4aa2b5) Petal Alpha Cutouts preserved... ";
+  std::cout << "[Test HSR 5] Flower Shader (shader_0b4aa2b5) Petal Alpha 镂空s preserved... ";
 
   const char* dump_path = "/tmp/game_anti_dither/dumps/StarRail/shader_0b4aa2b5_orig.spv";
   FILE* fp = fopen(dump_path, "rb");
@@ -257,7 +257,7 @@ void test_hsr_flower_shader_cutout_preserved() {
     if (op == hsr_dxvk::SPV_OP_DEMOTE_TO_HELPER_INVOCATION) demote_count++;
   }
 
-  // 精准断言：原本 5 处 demote，其中 1 处 Bayer 虚化被 NOP，剩余 4 处花瓣材质镂空必须 100% 完整保留！
+  // 断言验证: 1 处 Bayer 虚化置为 NOP，4 处材质镂空保持保留
   if (nop_count < 1 || demote_count != 4) {
     std::cerr << "FAILED: Flower cutout was incorrectly modified! (nop=" << nop_count << ", demote=" << demote_count << ")\n";
     std::abort();

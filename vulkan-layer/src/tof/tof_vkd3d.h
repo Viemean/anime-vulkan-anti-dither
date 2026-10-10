@@ -70,7 +70,7 @@ namespace tof_vkd3d {
    *
    * 处理逻辑：
    * 1. 材质分类定界与保护底线：
-   *    - 保持纹理透明度镂空（Alpha Cutout），凡条件依赖纹理采样的 Demote 保留原始指令。
+   *    - 保持纹理透明度镂空，凡条件依赖纹理采样的 Demote 保留原始指令。
    *    - 角色卡通材质与消隐分支：上游解耦 NMin/FMin 与 FAdd 中的 DitherTemporalAA / Bayer 点阵，下游中和 1000.0f 噪声与点阵 Demote。
    * 2. 执行策略：
    *    - 基于 SSA 数据流双向传播追踪，区分贴图采样与屏幕空间噪声；
@@ -146,7 +146,7 @@ namespace tof_vkd3d {
     bool has_any_sample = false;
     uint32_t demote_count = 0;
 
-    // Pass 1: 扫描 FragCoord、常量与特征标记
+    // 阶段 1: 扫描 FragCoord、常量与特征标记
     {
       size_t i = 5;
       while (i < word_count) {
@@ -202,7 +202,7 @@ namespace tof_vkd3d {
       return;
     }
 
-    // Pass 2: SSA 数据流级联依赖传播
+    // 阶段 2: SSA 数据流级联依赖传播
     bool changed = true;
     uint32_t iteration = 0;
     constexpr uint32_t max_iterations = 24;
@@ -342,7 +342,7 @@ namespace tof_vkd3d {
       return;
     }
 
-    // Pass 3: 上游解耦与下游中和
+    // 阶段 3: 上游解耦与下游中和
     size_t i = 5;
     uint32_t current_label = 0;
     uint32_t noped_count = 0;

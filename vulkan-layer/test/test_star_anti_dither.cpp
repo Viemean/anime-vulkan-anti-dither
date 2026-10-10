@@ -144,7 +144,7 @@ void test_star_bayer_demote_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 4: 依赖纹理采样的正常 Alpha Cutout 100% 保护
+// 用例 4: 依赖纹理采样的常规 Alpha 镂空 保护验证
 void test_star_texture_sample_cutout_preserved() {
   std::cout << "[Test Star 4] Texture sample cutout preservation... ";
 
@@ -189,7 +189,7 @@ void test_star_texture_sample_cutout_preserved() {
 
   star_layer::process_spirv_anti_dither(spv.data(), spv.size());
 
-  // 验证因依赖纹理采样，分支保持未变，正常 Alpha Cutout 得到保护
+  // 验证因依赖纹理采样，分支保持未变，正常 Alpha 镂空 得到保护
   assert(spv[branch_idx + 2] == 40);
 
   std::cout << "PASSED\n";

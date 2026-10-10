@@ -66,7 +66,7 @@ void test_camera_dither_fragcoord_kill() {
     make_op(4, wuwa_layer::SPV_OP_BRANCH_CONDITIONAL), 13, 30, 40,
     // OpLabel %30
     make_op(2, wuwa_layer::SPV_OP_LABEL), 30,
-    // OpKill (Should become NOP!)
+    // OpKill (预期置为 NOP)
     make_op(1, wuwa_layer::SPV_OP_KILL),
     // OpLabel %40
     make_op(2, wuwa_layer::SPV_OP_LABEL), 40,
@@ -185,7 +185,7 @@ void test_camera_dither_demote() {
 }
 
 void test_alpha_cutout_preserved() {
-  std::cout << "[Test 4] Alpha Cutout with OpImageSampleImplicitLod (Preserved)... ";
+  std::cout << "[Test 4] Alpha 镂空 with OpImageSampleImplicitLod (Preserved)... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
@@ -207,7 +207,7 @@ void test_alpha_cutout_preserved() {
     make_op(4, wuwa_layer::SPV_OP_BRANCH_CONDITIONAL), 16, 20, 30,
     // OpLabel %20
     make_op(2, wuwa_layer::SPV_OP_LABEL), 20,
-    // OpKill (must be PRESERVED!)
+    // OpKill (预期保留)
     make_op(1, wuwa_layer::SPV_OP_KILL),
     // OpLabel %30
     make_op(2, wuwa_layer::SPV_OP_LABEL), 30,
@@ -249,12 +249,12 @@ void test_hash_blacklist_whitelist() {
 
   uint32_t hash = game_logger::compute_spirv_hash(spv.data(), spv.size());
 
-  // Test Blacklist: add to exclude hashes -> should NOT be NOPed
+  // 测试黑名单: 加入排除哈希列表，预期不被置为 NOP
   game_logger::g_exclude_hashes.insert(hash);
   wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
   assert((spv[35] & 0xFFFF) == wuwa_layer::SPV_OP_KILL);
 
-  // Clear blacklist and run again -> should be NOPed
+  // 清空黑名单后再次执行，预期置为 NOP
   game_logger::g_exclude_hashes.clear();
   wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
   assert((spv[35] & 0xFFFF) == wuwa_layer::SPV_OP_NOP);
@@ -404,7 +404,7 @@ void test_azur_promilia_pipeline() {
     }
   }
 
-  // 5. Standard World Tree / Foliage (1200 DW) -> Preserved (NOT NOP)
+  // 5. 常规大世界树木/植被 (1200 字): 预期保留
   {
     std::vector<uint32_t> spv(1200, make_op(1, 0));
     spv[0] = azur_promilia_layer::SPV_HEADER_MAGIC;
@@ -418,13 +418,13 @@ void test_azur_promilia_pipeline() {
 }
 
 void test_foliage_dither_lod_with_alpha_cutout_preserved() {
-  std::cout << "[Test 9] Foliage Dither LOD Transition with Texture Alpha Cutout (Preserved)... ";
+  std::cout << "[Test 9] Foliage Dither LOD Transition with Texture Alpha 镂空 (Preserved)... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
   game_logger::g_force_hashes.clear();
 
-  // Simulates UE Landscape/Foliage Grass shader (e.g. 0x3bda0183):
+  // 模拟 UE 地形/植被草地着色器 (如 0x3bda0183):
   // Screen FragCoord -> OpUMod % 5 -> Add with Texture Alpha -> Demote
   std::vector<uint32_t> spv = {
     wuwa_layer::SPV_HEADER_MAGIC,
@@ -447,7 +447,7 @@ void test_foliage_dither_lod_with_alpha_cutout_preserved() {
     make_op(5, 184), 6, 13, 70, 14,
     make_op(4, wuwa_layer::SPV_OP_BRANCH_CONDITIONAL), 13, 30, 40,
     make_op(2, wuwa_layer::SPV_OP_LABEL), 30,
-    // Demote must be PRESERVED to maintain grass leaf silhouette!
+    // Demote 预期保留
     make_op(1, wuwa_layer::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
     make_op(2, wuwa_layer::SPV_OP_LABEL), 40,
     make_op(1, 253),
@@ -507,7 +507,7 @@ void test_dx11_real_world_shaders() {
     }
   }
 
-  // 2. Character Mesh Cutout (0x8c3a5c3e): NMin uncoupled to OpCopyObject, Demote neutralized to OpNop
+  // 2. 角色网格镂空 (0x8c3a5c3e): NMin 解耦为 OpCopyObject，Demote 中和为 OpNop
   {
     auto spv = load_spv(dump_dir + "shader_8c3a5c3e_orig.spv");
     if (!spv.empty()) {
@@ -543,7 +543,7 @@ void test_dx11_real_world_shaders() {
     }
   }
 
-  // 4. VKD3D Foliage, Flower & Terrain (0x4811f107): Bayer dither eliminated
+  // 4. VKD3D 植被、花朵与地形 (0x4811f107): Bayer 网点消除
   {
     auto spv = load_spv(dump_dir + "shader_4811f107_orig.spv");
     if (!spv.empty()) {
@@ -666,7 +666,7 @@ void test_character_hair_forehead_mask_uncoupled() {
 
   wuwa_layer::process_spirv_anti_dither(spv.data(), spv.size());
 
-  // Verify that %20 = OpExtInst NMin %11 %15 was uncoupled to OpCopyObject %15!
+  // 验证 NMin 指令解耦为 OpCopyObject
   bool found_copy_object = false;
   for (size_t i = 5; i < spv.size(); ) {
     uint32_t w = spv[i];
@@ -712,7 +712,7 @@ void test_scene_holographic_building_nmin_scalar_preserved() {
     make_op(4, wuwa_layer::SPV_OP_LOAD), 1, 11, 10,
     // Dither derivation from FragCoord
     make_op(5, 133), 1, 12, 11, 50, // FMul
-    // %15 = NMin %float_1 %12 (op1 is constant 1.0f! op2 is dither)
+    // %15 = NMin %float_1 %12 (操作数 1 为常量 1.0f，操作数 2 为 dither)
     make_op(7, wuwa_layer::SPV_OP_EXT_INST), 1, 15, 200, 79, 50, 12,
     // %16 = FOrdLessThan %15 %51
     make_op(5, 184), 6, 16, 15, 51,

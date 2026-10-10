@@ -50,12 +50,12 @@ void test_all_game_profiles_matched() {
   std::cout << "PASSED (All 12 Profiles verified)\n";
 }
 
-// 验证路径隔离与短词防误伤机制 (确保 Starfield, GEMINI, NTELauncher 等不会被误激活)
+// 验证路径隔离与短词匹配边界 (非目标进程不匹配)
 void test_anti_false_positive_matching() {
   std::cout << "[Test Game Registry 2] Anti-False-Positive Path & Keyword Isolation... ";
 
   const char* non_target_processes[] = {
-    // 1. Starfield 绝对不能误伤为 Star (星痕共鸣)
+    // 1. 验证 Starfield 不匹配短词 Star
     "D:\\SteamLibrary\\steamapps\\common\\Starfield\\Starfield.exe",
     "/home/user/games/starfield/starfield.exe",
     "Starfield.exe",

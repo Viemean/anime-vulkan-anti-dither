@@ -79,9 +79,9 @@ void test_dna_character_dither_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 2: 植被/树木 Alpha Cutout 100% 保护
+// 用例 2: 植被材质 Alpha 镂空 保护验证
 void test_dna_tree_foliage_alpha_cutout_preserved() {
-  std::cout << "[Test DNA 2] Foliage Alpha Cutout with Texture Sample (Preserved 100%)... ";
+  std::cout << "[Test DNA 2] Foliage Alpha 镂空 with Texture Sample (Preserved 100%)... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
@@ -103,13 +103,13 @@ void test_dna_tree_foliage_alpha_cutout_preserved() {
     make_op(2, dna_vkd3d::SPV_OP_LABEL), 10,
     // OpImageSampleImplicitLod: type 4, res 15, sampled_img 2, coord 3
     make_op(5, 87), 4, 15, 2, 3,
-    // OpFOrdLessThan %16 %15 %50 (Alpha Cutout condition)
+    // OpFOrdLessThan %16 %15 %50 (Alpha 镂空 condition)
     make_op(5, dna_vkd3d::SPV_OP_FORDERED_LESS_THAN), 6, 16, 15, 50,
     // OpBranchConditional %16 %20 %30
     make_op(4, dna_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 16, 20, 30,
     // OpLabel %20
     make_op(2, dna_vkd3d::SPV_OP_LABEL), 20,
-    // OpDemoteToHelperInvocation (应当保留，绝不能被 NOP)
+    // OpDemoteToHelperInvocation (预期保留)
     make_op(1, dna_vkd3d::SPV_OP_DEMOTE_TO_HELPER),
     // OpLabel %30
     make_op(2, dna_vkd3d::SPV_OP_LABEL), 30,
@@ -129,7 +129,7 @@ void test_dna_tree_foliage_alpha_cutout_preserved() {
   std::cout << "PASSED\n";
 }
 
-// 用例 3: 实机 Dump 着色器基准对照组验证
+// 用例 3: 实机转储着色器基准对照组验证
 void test_dna_real_dump_benchmarks() {
   std::string dir = "/tmp/game_anti_dither/dumps/EM-Win64-Shipping";
   if (!fs::exists(dir)) {
@@ -151,7 +151,7 @@ void test_dna_real_dump_benchmarks() {
     "5f718d79", "bc7fc1b4", "af4ab335", "07de3a83", "4febc1e5", "1fb9caf7", "c6859d72"
   };
 
-  // 1. 验证纯镂空着色器 100% 保护
+  // 1. 验证材质镂空着色器保留
   for (const auto& h : cutout_hashes) {
     std::string path = dir + "/shader_" + h + "_orig.spv";
     if (!fs::exists(path)) continue;
@@ -188,7 +188,7 @@ void test_dna_real_dump_benchmarks() {
     }
   }
 
-  // 2. 验证角色混合着色器：虚化网点消除，Alpha Cutout 保留
+  // 2. 验证角色混合着色器：虚化网点消除，Alpha 镂空 保留
   for (const auto& h : char_hashes) {
     std::string path = dir + "/shader_" + h + "_orig.spv";
     if (!fs::exists(path)) continue;
@@ -355,7 +355,7 @@ void test_dna_inverted_mask_skin_neutralized() {
     make_op(4, dna_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 17, 20, 30,
     // OpLabel %20
     make_op(2, dna_vkd3d::SPV_OP_LABEL), 20,
-    // OpDemoteToHelperInvocation (应当被 100% NOP)
+    // OpDemoteToHelperInvocation (预期置为 NOP)
     make_op(1, dna_vkd3d::SPV_OP_DEMOTE_TO_HELPER),
     make_op(2, dna_vkd3d::SPV_OP_LABEL), 30,
     make_op(1, 253),
@@ -518,7 +518,7 @@ void test_dna_dxvk_real_face_and_impostor_tree() {
     }
   };
 
-  // 1. 大世界花草与树木植被：LOD 过渡绝对保护，杜绝中远距离方形卡片
+  // 1. 大世界植被材质: 验证 LOD 过渡丢弃指令保留
   test_dump_shader("1f7ea4ed", 2, 2);
   test_dump_shader("03423537", 1, 1);
 

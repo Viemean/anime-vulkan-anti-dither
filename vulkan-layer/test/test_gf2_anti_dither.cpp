@@ -12,9 +12,9 @@ static inline uint32_t make_op(uint16_t length, uint16_t opcode) {
   return (static_cast<uint32_t>(length) << 16) | opcode;
 }
 
-// 用例 1: 少前2阶段检测 (Fragment vs Vertex)
+// 用例 1: 少前2阶段检测 (片段 vs 顶点)
 void test_gf2_pipeline_stage_dispatch() {
-  std::cout << "[Test GF2 1] Stage detection (Fragment vs Vertex)... ";
+  std::cout << "[Test GF2 1] Stage detection (片段 vs 顶点)... ";
 
   std::vector<uint32_t> ps_spv = {
     gf2_dxvk::SPV_HEADER_MAGIC,
@@ -226,9 +226,9 @@ void test_gf2_character_ign_noise_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 5: 树木植被 / 铁丝网 Alpha Cutout 保护 (依赖采样，丢弃条件 100% 完整保留)
+// 用例 5: 植被与栅栏 Alpha 镂空 保护验证 (依赖采样，丢弃条件预期保留)
 void test_gf2_texture_alpha_cutout_preserved() {
-  std::cout << "[Test GF2 5] Foliage / Fence Alpha Cutout (strictly preserved)... ";
+  std::cout << "[Test GF2 5] Foliage / Fence Alpha 镂空 (strictly preserved)... ";
 
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
@@ -350,7 +350,7 @@ void test_gf2_character_body_nmin_fade_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 7: 真实游戏 Dump 着色器验证 (身体、帽子、衣物消除，环境植被 100% 保护)
+// 用例 7: 实际转储着色器验证 (角色材质消除，环境植被保留)
 #include <fstream>
 
 static std::vector<uint32_t> load_spv_file(const std::string& path) {
@@ -442,7 +442,7 @@ void test_gf2_real_dumped_shaders() {
 
     gf2_dxvk::process_spirv_anti_dither(code.data(), code.size());
 
-    // 验证环境与植物树木着色器中的 OpDemoteToHelperInvocation 100% 完整保留 (绝不允许被修改为NOP)
+    // 验证环境着色器中的 OpDemoteToHelperInvocation 保持保留
     size_t remain_demotes = 0;
     for (size_t i = 5; i < code.size(); ) {
       uint32_t w = code[i];

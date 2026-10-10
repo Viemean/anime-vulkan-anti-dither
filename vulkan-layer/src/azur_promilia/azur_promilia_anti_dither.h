@@ -166,7 +166,7 @@ namespace azur_promilia_layer {
       }
     }
 
-    // 记录原始 SPIR-V 用于 Dump 诊断
+    // 记录原始 SPIR-V 用于转储诊断
     std::vector<uint32_t> orig_spv;
     if (game_logger::g_dump_enabled) {
       orig_spv.assign(spirv_code, spirv_code + word_count);
@@ -281,7 +281,7 @@ namespace azur_promilia_layer {
       }
     }
 
-    // 5. 标准化日志与 Dump 框架集成
+    // 5. 标准化日志与转储框架集成
     if (fade_decoupled_count > 0 || dither_nop_count > 0 || preserved_cutout_count > 0) {
       game_logger::log_msg("[反虚化驱动层-AZUR_PROMILIA-DXVK] 着色器: 0x%08x | 字长: %zu | 消除虚化: %u 处 | 保留正常裁剪: %u 处 | 类别: 散斑Fade解耦与网点中和\n",
                            shader_hash, word_count, dither_nop_count, preserved_cutout_count);

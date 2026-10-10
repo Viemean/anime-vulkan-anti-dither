@@ -62,7 +62,7 @@ namespace zmd_dxvk {
    * 特性：
    * 1. 适配 DXVK 将 DXBC 翻译为 SPIR-V 的典型结构 (icb / cb 缓冲、FragCoord 与点阵噪声)；
    * 2. 识别 Bayer 4x4 / 8x8 矩阵系数及 IGN 噪波；
-   * 3. 基于 SSA 数据流隔离纹理采样，保护铁丝网栅栏与植被镂空 (Alpha Cutout)；
+   * 3. 基于 SSA 数据流隔离纹理采样，保护铁丝网栅栏与植被镂空 (Alpha 镂空)；
    * 4. 针对 OpKill 采用分支重定向保护 CFG 基本块 Terminator，针对 OpDemote 进行定向置 NOP。
    */
   /**
@@ -129,7 +129,7 @@ namespace zmd_dxvk {
     bool has_any_sample = false;
     bool has_dither_signature = false;
 
-    // Pass 1: 扫描 FragCoord、Bayer 矩阵特征 (icb, 17.0f, 1/17.0f, 1/16.0f) 或 IGN 噪声
+    // 阶段 1: 扫描 FragCoord、Bayer 矩阵特征 (icb, 17.0f, 1/17.0f, 1/16.0f) 或 IGN 噪声
     {
       size_t i = 5;
       while (i < word_count) {
@@ -212,7 +212,7 @@ namespace zmd_dxvk {
       }
     }
 
-    // 若无特征且非强制，则安全放行并 Dump 用于首发分析
+    // 若无特征且非强制，则安全放行并转储用于诊断分析
     if (!has_dither_signature && !is_force_mode) {
       if (game_logger::g_dump_enabled && has_any_discard) {
         game_logger::dump_shader_bundle(spirv_code, word_count,
@@ -225,7 +225,7 @@ namespace zmd_dxvk {
       return;
     }
 
-    // Pass 2: 追踪 FragCoord 与 Dither 噪声传播，严格隔离纹理采样
+    // 阶段 2: 追踪 FragCoord 与 Dither 噪声传播，严格隔离纹理采样
     bool changed = true;
     uint32_t iteration = 0;
     constexpr uint32_t max_iterations = 24;
@@ -344,7 +344,7 @@ namespace zmd_dxvk {
       }
     }
 
-    // Pass 3: 收集分支与丢弃结构并安全中和 (保持 CFG Terminator 合法)
+    // 阶段 3: 收集分支与丢弃结构并安全中和 (保持 CFG Terminator 合法)
     struct BranchInfo {
       size_t offset;
       uint32_t cond;

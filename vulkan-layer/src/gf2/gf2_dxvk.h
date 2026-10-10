@@ -65,7 +65,7 @@ namespace gf2_dxvk {
    *    - 头部/特定部位：FragCoord 屏幕空间坐标与 4x4 / 8x8 Bayer 矩阵点阵；
    *    - 角色身体/皮肤：3D Hash 噪波 (0.1031 与 31.32 散列) 消融；
    *    - 角色衣物/配件：Uniform 缓冲区动态消融阈值 (NMin/FMin) 及 cb2 Cutoff 动态裁剪；
-   * 2. 环境物体保护：保留基于固定常数 (如 0.5f) 的 Alpha Cutout 镂空；
+   * 2. 环境物体保护：保留基于固定常数 (如 0.5f) 的 Alpha 镂空；
    * 3. 针对命中条件丢弃指令：OpKill 执行分支重定向保持 Terminator，OpDemote 替换为 NOP，解决穿透消失问题。
    */
   /**
@@ -145,7 +145,7 @@ namespace gf2_dxvk {
     bool has_dither_signature = false;
     bool has_cb2 = false;
 
-    // Pass 1: 扫描 FragCoord、FrontFacing、Bayer 矩阵、3D Hash 噪波、IGN 噪波及 cb2 角色材质常量缓冲
+    // 阶段 1: 扫描 FragCoord、FrontFacing、Bayer 矩阵、3D Hash 噪波、IGN 噪波及 cb2 角色材质常量缓冲
     {
       size_t i = 5;
       while (i < word_count) {
@@ -339,7 +339,7 @@ namespace gf2_dxvk {
       return;
     }
 
-    // 若无特征且非强制模式，Dump 并安全放行
+    // 若无特征且非强制模式，转储并安全放行
     if (!has_dither_signature && !is_force_mode) {
       if (game_logger::g_dump_enabled && has_any_discard) {
         game_logger::dump_shader_bundle(spirv_code, word_count,
@@ -352,7 +352,7 @@ namespace gf2_dxvk {
       return;
     }
 
-    // Pass 2: 追踪 FragCoord、Hash 噪波、cb2 参数与相机淡出阈值传播，同时隔离普通纹理采样
+    // 阶段 2: 追踪 FragCoord、Hash 噪波、cb2 参数与相机淡出阈值传播，同时隔离普通纹理采样
     bool changed = true;
     uint32_t iteration = 0;
     constexpr uint32_t max_iterations = 32;
@@ -448,7 +448,7 @@ namespace gf2_dxvk {
           }
         }
 
-        // 识别减去 0.5f 的纯静态 Alpha Cutout 算术结构 (OpFSub = 131)
+        // 识别减去 0.5f 的纯静态 Alpha 镂空算术结构 (OpFSub = 131)
         if (opcode == 131 /* OpFSub */ && length >= 5) {
           uint32_t op1 = spirv_code[i + 3];
           uint32_t op2 = spirv_code[i + 4];
@@ -514,7 +514,7 @@ namespace gf2_dxvk {
       }
     }
 
-    // Pass 3: 收集丢弃结构并安全中和
+    // 阶段 3: 收集丢弃结构并安全中和
     struct BranchInfo {
       size_t offset;
       uint32_t cond;
@@ -567,7 +567,7 @@ namespace gf2_dxvk {
       if (is_force_mode) return true;
       if (cond == 0 || cond >= bound) return false;
 
-      // 角色布料上的纯静态 Alpha Cutout 镂空 (包含 0.5f 静态常数阈值比较)，绝对保护
+      // 角色布料上的纯静态 Alpha 镂空 (包含 0.5f 静态常数阈值比较)，保留原始指令
       if (is_alpha_cutout_cond[cond]) {
         return false;
       }

@@ -66,7 +66,7 @@ namespace zmd_vulkan {
    * 特性：
    * 1. 采用原生 Vulkan / Unity GfxDeviceVK 架构；
    * 2. 识别 Bayer 4x4 / 8x8 抖动矩阵与 IGN 噪声特征；
-   * 3. 严格隔离贴图采样（Alpha Cutout），保护大世界铁丝网（Fence）与植被；
+   * 3. 严格隔离贴图采样（Alpha 镂空），保护大世界铁丝网（Fence）与植被；
    * 4. 在开启 ANTI_DITHER_DUMP 时完整导出供进一步逆向。
    */
   /**
@@ -133,7 +133,7 @@ namespace zmd_vulkan {
     bool has_any_sample = false;
     bool has_dither_signature = false;
 
-    // Pass 1: 扫描 FragCoord、Bayer 矩阵特征 (17.0f, 1/17.0f, 1/16.0f) 或 IGN 噪声
+    // 阶段 1: 扫描 FragCoord、Bayer 矩阵特征 (17.0f, 1/17.0f, 1/16.0f) 或 IGN 噪声
     {
       size_t i = 5;
       while (i < word_count) {
@@ -214,7 +214,7 @@ namespace zmd_vulkan {
       }
     }
 
-    // 若无特征且非强制，则安全放行并 Dump 用于首发分析
+    // 若无特征且非强制，则安全放行并转储用于诊断分析
     if (!has_dither_signature && !is_force_mode) {
       if (game_logger::g_dump_enabled && has_any_discard) {
         game_logger::dump_shader_bundle(spirv_code, word_count,
@@ -227,7 +227,7 @@ namespace zmd_vulkan {
       return;
     }
 
-    // Pass 2: 追踪 FragCoord 与 Dither 噪声传播，严格隔离纹理采样
+    // 阶段 2: 追踪 FragCoord 与 Dither 噪声传播，严格隔离纹理采样
     bool changed = true;
     uint32_t iteration = 0;
     constexpr uint32_t max_iterations = 24;
@@ -346,7 +346,7 @@ namespace zmd_vulkan {
       }
     }
 
-    // Pass 3: 收集分支与丢弃结构并安全中和 (重定向条件分支以保持 CFG 基本块 Terminator 合法)
+    // 阶段 3: 收集分支与丢弃结构并安全中和 (重定向条件分支以保持 CFG 基本块 Terminator 合法)
     struct BranchInfo {
       size_t offset;
       uint32_t cond;

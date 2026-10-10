@@ -72,9 +72,9 @@ void test_tof_character_noise_dither_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 2: 大世界植被/树木 Alpha Cutout 100% 保护
+// 用例 2: 植被材质 Alpha 镂空 保护验证
 void test_tof_tree_foliage_alpha_cutout_preserved() {
-  std::cout << "[Test TOF 2] Tree Foliage Alpha Cutout with Texture Sample (Preserved 100%)... ";
+  std::cout << "[Test TOF 2] Tree Foliage Alpha 镂空 with Texture Sample (Preserved 100%)... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
@@ -96,7 +96,7 @@ void test_tof_tree_foliage_alpha_cutout_preserved() {
     make_op(2, tof_vkd3d::SPV_OP_LABEL), 10,
     // OpImageSampleImplicitLod: type 4, res 15, sampled_img 2, coord 3
     make_op(5, 87), 4, 15, 2, 3,
-    // OpFOrdLessThan %16 %15 %50 (Alpha Cutout condition)
+    // OpFOrdLessThan %16 %15 %50 (Alpha 镂空 condition)
     make_op(5, 184), 6, 16, 15, 50,
     // OpBranchConditional %16 %20 %30
     make_op(4, tof_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 16, 20, 30,
@@ -122,7 +122,7 @@ void test_tof_tree_foliage_alpha_cutout_preserved() {
   std::cout << "PASSED\n";
 }
 
-// 用例 3: 真实 Dump 着色器基准对照组验证（若存在 dump 目录则触发）
+// 用例 3: 实机转储着色器基准对照组验证（若存在 dump 目录则触发）
 void test_tof_real_dump_benchmarks() {
   std::string dir = "/tmp/game_anti_dither/dumps/QRSL";
   if (!fs::exists(dir)) {
@@ -275,9 +275,9 @@ void test_tof_dxvk_character_dither_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 5: 幻塔 DXVK 大世界植被/树叶 Alpha Cutout 100% 保护 (OpKill 绝对保留)
+// 用例 5: 幻塔 DXVK 植被材质 Alpha 镂空 保护验证 (OpKill 预期保留)
 void test_tof_dxvk_tree_cutout_preserved() {
-  std::cout << "[Test TOF 5] DXVK Tree Foliage Alpha Cutout with Texture Sample (Preserved 100%)... ";
+  std::cout << "[Test TOF 5] DXVK Tree Foliage Alpha 镂空 with Texture Sample (Preserved 100%)... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
@@ -301,13 +301,13 @@ void test_tof_dxvk_tree_cutout_preserved() {
     make_op(2, tof_dxvk::SPV_OP_LABEL), 10,
     // OpImageSampleImplicitLod: type 4, res 15, sampled_img 2, coord 3
     make_op(5, 87), 4, 15, 2, 3,
-    // OpFOrdLessThan %16 %15 %50 (Alpha Cutout condition)
+    // OpFOrdLessThan %16 %15 %50 (Alpha 镂空 condition)
     make_op(5, 184), 6, 16, 15, 50,
     // OpBranchConditional %16 %20 %30
     make_op(4, tof_dxvk::SPV_OP_BRANCH_CONDITIONAL), 16, 20, 30,
     // OpLabel %20
     make_op(2, tof_dxvk::SPV_OP_LABEL), 20,
-    // OpKill (应当保留，绝不能被 NOP)
+    // OpKill (预期保留)
     make_op(1, tof_dxvk::SPV_OP_KILL),
     // OpLabel %30
     make_op(2, tof_dxvk::SPV_OP_LABEL), 30,

@@ -119,7 +119,7 @@ void test_rva_validation_and_fallback() {
   (void)fallback_addr;
   assert(fallback_addr == base + 4); // 成功定位到漂移后的新地址
 
-  // 3. 模拟熔断：特征码完全不存在时必须拒绝
+  // 3. 模拟特征码不存在时的拒绝写入
   nte_mem::SignaturePattern invalid_pat("DE AD BE EF");
   uintptr_t no_addr = nte_mem::scan_memory(base, fake_code.size(), invalid_pat);
   (void)no_addr;

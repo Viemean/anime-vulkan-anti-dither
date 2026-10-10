@@ -12,9 +12,9 @@ static inline uint32_t make_op(uint16_t length, uint16_t opcode) {
   return (static_cast<uint32_t>(length) << 16) | opcode;
 }
 
-// 用例 1: 终末地管线阶段分发判定 (Fragment vs Vertex)
+// 用例 1: 终末地管线阶段分发判定 (片段 vs 顶点)
 void test_zmd_pipeline_stage_dispatch() {
-  std::cout << "[Test ZMD 1] Stage detection (Fragment vs Vertex)... ";
+  std::cout << "[Test ZMD 1] Stage detection (片段 vs 顶点)... ";
 
   std::vector<uint32_t> ps_spv = {
     zmd_vulkan::SPV_HEADER_MAGIC,
@@ -115,9 +115,9 @@ void test_zmd_character_bayer_dither_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 3: 终末地大世界铁丝网/植被贴图 Alpha Cutout 100% 保护
+// 用例 3: 栅栏与植被贴图 Alpha 镂空 保护验证
 void test_zmd_fence_foliage_alpha_cutout_preserved() {
-  std::cout << "[Test ZMD 3] Fence & Foliage Alpha Cutout with Texture Sample (Preserved 100%)... ";
+  std::cout << "[Test ZMD 3] Fence & Foliage Alpha 镂空 with Texture Sample (Preserved 100%)... ";
 
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
@@ -139,11 +139,11 @@ void test_zmd_fence_foliage_alpha_cutout_preserved() {
     make_op(2, 248 /* OpLabel */), 10,
     // OpImageSampleImplicitLod (铁丝网纹理采样)
     make_op(5, 87), 4, 15, 2, 3,
-    // OpFOrdLessThan %16 %15 %5 (Alpha Cutout)
+    // OpFOrdLessThan %16 %15 %5 (Alpha 镂空)
     make_op(5, 184), 6, 16, 15, 5,
     make_op(4, 250 /* OpBranchConditional */), 16, 20, 30,
     make_op(2, 248 /* OpLabel */), 20,
-    // OpKill (依赖纹理采样，必须保留)
+    // OpKill (依赖纹理采样，预期保留)
     make_op(1, zmd_vulkan::SPV_OP_KILL),
     make_op(2, 248 /* OpLabel */), 30,
     make_op(1, 253),
@@ -161,7 +161,7 @@ void test_zmd_fence_foliage_alpha_cutout_preserved() {
   }
 
   if (!found_kill) {
-    std::cerr << "FAILED: Fence Alpha Cutout OpKill was wrongly modified to OpNop!\n";
+    std::cerr << "FAILED: Fence Alpha 镂空 OpKill was wrongly modified to OpNop!\n";
     std::abort();
   }
 
@@ -256,9 +256,9 @@ void test_zmd_dxvk_character_dither_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 6: 终末地 DXVK 大世界铁丝网/植被贴图 Alpha Cutout 100% 保护
+// 用例 6: 终末地 DXVK 栅栏与植被贴图 Alpha 镂空 保护验证
 void test_zmd_dxvk_alpha_cutout_preserved() {
-  std::cout << "[Test ZMD 6] DXVK Fence & Foliage Alpha Cutout (Preserved 100%)... ";
+  std::cout << "[Test ZMD 6] DXVK Fence & Foliage Alpha 镂空 (Preserved 100%)... ";
 
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
@@ -282,11 +282,11 @@ void test_zmd_dxvk_alpha_cutout_preserved() {
     make_op(2, 248 /* OpLabel */), 10,
     // OpImageSampleImplicitLod (铁丝网纹理采样)
     make_op(5, 87), 4, 15, 2, 3,
-    // OpFOrdLessThan %16 %15 %5 (Alpha Cutout)
+    // OpFOrdLessThan %16 %15 %5 (Alpha 镂空)
     make_op(5, 184), 6, 16, 15, 5,
     make_op(4, 250 /* OpBranchConditional */), 16, 20, 30,
     make_op(2, 248 /* OpLabel */), 20,
-    // OpDemoteToHelperInvocationEXT (依赖纹理采样，必须保留)
+    // OpDemoteToHelperInvocationEXT (依赖纹理采样，预期保留)
     make_op(1, zmd_dxvk::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
     make_op(2, 248 /* OpLabel */), 30,
     make_op(1, 253),
@@ -304,7 +304,7 @@ void test_zmd_dxvk_alpha_cutout_preserved() {
   }
 
   if (!found_demote) {
-    std::cerr << "FAILED: DXVK Fence Alpha Cutout OpDemote was wrongly modified to OpNop!\n";
+    std::cerr << "FAILED: DXVK Fence Alpha 镂空 OpDemote was wrongly modified to OpNop!\n";
     std::abort();
   }
 

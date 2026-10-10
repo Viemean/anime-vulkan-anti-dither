@@ -116,9 +116,9 @@ void test_hi3_bayer_dither_kill_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 3: 崩坏3场景植被与材质镂空 Alpha Cutout 100% 保护
+// 用例 3: 场景植被与材质镂空 Alpha 镂空 保护验证
 void test_hi3_tree_foliage_alpha_cutout_preserved() {
-  std::cout << "[Test HI3 3] Scene Alpha Cutout with Texture Sample (Preserved 100%)... ";
+  std::cout << "[Test HI3 3] Scene Alpha 镂空 with Texture Sample (Preserved 100%)... ";
 
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
@@ -143,11 +143,11 @@ void test_hi3_tree_foliage_alpha_cutout_preserved() {
     make_op(2, 248 /* OpLabel */), 10,
     // OpImageSampleImplicitLod: type 4, res 15, sampled_img 2, coord 3
     make_op(5, 87), 4, 15, 2, 3,
-    // OpFOrdLessThan %16 %15 %5 (Alpha Cutout)
+    // OpFOrdLessThan %16 %15 %5 (Alpha 镂空)
     make_op(5, 184), 6, 16, 15, 5,
     make_op(4, 250 /* OpBranchConditional */), 16, 20, 30,
     make_op(2, 248 /* OpLabel */), 20,
-    // OpKill (依赖采样，绝对不能被消除)
+    // OpKill (依赖采样，预期保留)
     make_op(1, hi3_dxvk::SPV_OP_KILL),
     make_op(2, 248 /* OpLabel */), 30,
     make_op(1, 253),

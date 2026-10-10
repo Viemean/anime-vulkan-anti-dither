@@ -75,7 +75,7 @@ namespace tof_dxvk {
    *    - 支持通过 OpCompositeExtract 提取的标量噪声追踪。
    * 2. 目标达成与保护铁律：
    *    - 角色 Toon/DitherTemporalAA/近景消隐分支精准消除；
-   *    - 依赖贴图采样的 Alpha Cutout（植被/树木/树叶/布料边缘）保留原始指令；
+   *    - 依赖贴图采样的 Alpha 镂空（植被/树木/树叶/布料边缘）保留原始指令；
    *    - 排除小字长纯写 0 遮罩着色器，防止产生黑色空洞。
    */
   /**
@@ -141,7 +141,7 @@ namespace tof_dxvk {
     bool has_any_sample = false;
     uint32_t demote_count = 0;
 
-    // Pass 1: 扫描 FragCoord、标量与复合常量
+    // 阶段 1: 扫描 FragCoord、标量与复合常量
     {
       size_t i = 5;
       while (i < word_count) {
@@ -175,7 +175,7 @@ namespace tof_dxvk {
               is_dither_noise[res_id] = 1;
             }
           }
-          // 2. 标量 Bayer Table 分数 (0/9..8/9) 与点阵常量
+          // 2. 标量 Bayer 矩阵表分数 (0/9..8/9) 与点阵常量
           else if ((fu.f >= -0.0001f && fu.f <= 0.0001f) ||
                    (fu.f >= 0.1111f && fu.f <= 0.1112f) ||
                    (fu.f >= 0.2222f && fu.f <= 0.2223f) ||
@@ -195,7 +195,7 @@ namespace tof_dxvk {
               is_dither_const[res_id] = 1;
             }
           }
-          // 3. 屏幕空间 Interleaved Gradient Noise (IGN) 标量常量
+          // 3. 屏幕空间交错梯度噪声 (IGN) 标量常量
           else if ((fu.f >= 0.06711f && fu.f <= 0.06712f) ||
                    (fu.f >= 0.005837f && fu.f <= 0.005838f) ||
                    (fu.f >= 52.982f && fu.f <= 52.983f)) {
@@ -244,7 +244,7 @@ namespace tof_dxvk {
       return;
     }
 
-    // Pass 2a: FragCoord 依赖收敛传播
+    // 阶段 2a: FragCoord 依赖收敛传播
     bool fc_changed = true;
     uint32_t fc_iteration = 0;
     while (fc_changed && fc_iteration < 20) {
@@ -301,7 +301,7 @@ namespace tof_dxvk {
       }
     }
 
-    // Pass 2b: SSA 数据流级联依赖传播
+    // 阶段 2b: SSA 数据流级联依赖传播
     bool changed = true;
     uint32_t iteration = 0;
     constexpr uint32_t max_iterations = 28;
@@ -484,7 +484,7 @@ namespace tof_dxvk {
       return;
     }
 
-    // Pass 3: 执行上游解耦与下游中和
+    // 阶段 3: 执行上游解耦与下游中和
     uint32_t noped_count = 0;
     uint32_t preserved_cutout_count = 0;
     uint32_t current_label = 0;

@@ -69,7 +69,7 @@ namespace nte_vkd3d {
    * 处理逻辑：
    * 1. 材质分类定界：
    *    - 角色卡通材质：清除屏幕空间 Bayer 点阵虚化逻辑。
-   *    - 大世界与植被材质：保持纹理透明度镂空（Alpha Cutout），避免几何面片实心化。
+   *    - 大世界与植被材质：保持纹理透明度镂空，避免几何面片实心化。
    * 2. 执行策略：
    *    - 基于物料字长规模与数据流依赖进行范围隔离与噪声剥离。
    */
@@ -164,7 +164,7 @@ namespace nte_vkd3d {
 
     std::vector<uint8_t> is_bayer_fraction(bound, 0);
 
-    // Pass 1: 扫描 FragCoord、Bayer/IGN 常量及材质标记
+    // 阶段 1: 扫描 FragCoord、Bayer/IGN 常量及材质标记
     {
       size_t i = 5;
       while (i < word_count) {
@@ -278,7 +278,7 @@ namespace nte_vkd3d {
       return;
     }
 
-    // Pass 2: 追踪 FragCoord、贴图采样与 Dither 噪声传播
+    // 阶段 2: 追踪 FragCoord、贴图采样与网点噪声传播
     bool changed = true;
     uint32_t iteration = 0;
     constexpr uint32_t max_iterations = 24;
@@ -404,7 +404,7 @@ namespace nte_vkd3d {
       }
     }
 
-    // Pass 3: 执行上游解耦与下游中和
+    // 阶段 3: 执行上游解耦与下游中和
     size_t i = 5;
     uint32_t current_label = 0;
     uint32_t noped_count = 0;

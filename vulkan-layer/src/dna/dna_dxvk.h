@@ -63,27 +63,27 @@ namespace dna_dxvk {
    *
    * 核心处理逻辑与阶段划分：
    * 1. 指令集适配：支持 DXVK 生成的 OpKill (252) 与 OpDemoteToHelperInvocation (5380)；
-   * 2. Pass 1: 特征常量扫描，提取 FragCoord、Bayer 噪声常数（347.8345f / 3343.2837f）；
-   * 3. Pass 2: SSA 数据流级联拓扑推导与反向消隐追踪 (is_inverted_mask)；
-   * 4. Pass 2.5: 上游算术与布尔解耦：
+   * 2. 阶段 1: 特征常量扫描，提取 FragCoord、Bayer 噪声常数（347.8345f / 3343.2837f）；
+   * 3. 阶段 2: SSA 数据流级联拓扑推导与反向消隐追踪 (is_inverted_mask)；
+   * 4. 阶段 2.5: 上游算术与布尔解耦：
    *    - 乘法/极值剥离：OpFMul / OpExtInst FMin 剥离纹理与噪声乘积；
-   *    - 复合逻辑化简：OpLogicalOr 消除 Or(Fade, And(!Fade, Cutout)) 中的噪声分支；
-   * 5. Pass 3: 下游 Discard 指令级门禁判定与分类分流。
+   *    - 复合逻辑化简：OpLogicalOr 消除 Or(Fade, And(!Fade, 镂空)) 中的噪声分支；
+   * 5. 阶段 3: 下游丢弃指令级门禁判定与分类分流。
    *
    * 已知物理机理与排查结论：
    * 1. 角色衣服主通道 (字长 12,000+)：
-   *    采用 OpFMul(TextureAlpha, FragCoordNoise) 调制，通过 Pass 2.5 改写为 OpCopyObject 直通解耦。
+   *    采用 OpFMul(TextureAlpha, FragCoordNoise) 调制，通过阶段 2.5 改写为 OpCopyObject 直通解耦。
    * 2. 角色次表面皮肤与特殊通道 (字长 1,600 ~ 3,200 及 15,000+)：
-   *    采用 OpLogicalNot 作用于比较指令的反向消隐结构，通过 is_inverted_mask 进行追踪并在 Pass 3 消除。
+   *    采用 OpLogicalNot 作用于比较指令的反向消隐结构，通过 is_inverted_mask 进行追踪并在阶段 3 消除。
    * 3. 纯遮罩几何体通道 (Depth PrePass，字长 400 ~ 800，无贴图采样)：
    *    向深度缓冲写入几何深度。保持其丢弃指令以正常裁剪遮罩轮廓，避免深度缓冲被透明多边形错误写入导致 BasePass 被 Early-Z 误剔除。
    * 4. 大世界植被与远景八面体替身树木 (字长 1,300 ~ 2,100)：
-   *    - 植被与树木在 LOD 过渡距离触发引擎 LODDitherFade，条件结构为 (Cutout && !LOD_Noise) || LOD_Noise；
+   *    - 植被与树木在 LOD 过渡距离触发引擎 LODDitherFade，条件结构为 (镂空 && !LOD_噪声) || LOD_噪声；
    *    - 远景八面体替身树木通过几何裁切控制剪影；
    *    - 非角色环境材质的丢弃指令必须保持原生逻辑，避免破坏远景镂空导致卡片化。
    *
    * 已知待解决问题：
-   * - 远景树木跨 LOD 网点抖动过渡面片化（Foliage Billboard Artifacts during Dithered LOD Crossfade）：
+   * - 远景树木跨 LOD 网点过渡面片化：
    *   大世界远景树木处于 LOD 渐变过渡区间时，因 LOD 噪声与镂空裁剪存在耦合，过渡期退化为实心多边形卡片；
    *   拉近距离进入 LOD 0 且退出过渡区间后恢复正常。
    */
@@ -158,7 +158,7 @@ namespace dna_dxvk {
     bool has_any_sample = false;
     bool has_char_dither_feature = false;
 
-    // Pass 1: 扫描 FragCoord 与 UE PseudoRandom 常量特征标记
+    // 阶段 1: 扫描 FragCoord 与 UE 伪随机常量特征标记
     {
       size_t i = 5;
       while (i < word_count) {
@@ -212,7 +212,7 @@ namespace dna_dxvk {
       }
     }
 
-    // Pass 2: SSA 数据流级联依赖传播
+    // 阶段 2: SSA 数据流级联依赖传播
     bool changed = true;
     uint32_t iteration = 0;
     constexpr uint32_t max_iterations = 24;
@@ -255,7 +255,7 @@ namespace dna_dxvk {
               uint32_t op1 = spirv_code[i + 3];
               if (op1 < bound) {
                 not_operand[res_id] = op1;
-                // 标记反向贴图消隐：严格限定为对贴图采样比较的取反 (Not(SampleAlpha <= Cutoff))
+                // 标记反向贴图消隐：限定为对贴图采样比较的取反 (Not(SampleAlpha <= Cutoff))
                 if (is_cmp_opcode_id[op1] && depends_on_sample[op1]) {
                   if (!is_inverted_mask[res_id]) {
                     is_inverted_mask[res_id] = 1;
@@ -348,7 +348,7 @@ namespace dna_dxvk {
       }
     }
 
-    // Pass 2.5: Demote 切片逆向追溯与上游复合 Dither 噪声解耦 (Upstream Uncoupling)
+    // 阶段 2.5: Demote 切片逆向追溯与上游复合网点噪声解耦
     std::vector<uint8_t> is_in_demote_slice(bound, 0);
     {
       size_t k = 5;
@@ -462,7 +462,7 @@ namespace dna_dxvk {
             }
           }
         }
-        // OpLogicalOr(FadeMask, And(!FadeMask, Cutout)) 复合消隐解耦
+        // OpLogicalOr 复合消隐解耦
         else if (op == SPV_OP_LOGICAL_OR && l >= 5) {
           uint32_t res_id = spirv_code[k + 2];
           uint32_t op1 = spirv_code[k + 3];
@@ -480,7 +480,7 @@ namespace dna_dxvk {
               return 0;
             };
 
-            // 模式 1: Or(!A, And(B, A)) 或 Or(!A, And(A, B)) -> 化简为 Cutout 条件 B
+            // 模式 1: Or(!A, And(B, A)) 或 Or(!A, And(A, B)) -> 化简为镂空条件 B
             if (def_opcode[op1] == SPV_OP_LOGICAL_NOT && def_opcode[op2] == SPV_OP_LOGICAL_AND) {
               uint32_t not_src = not_operand[op1];
               uint32_t a1 = and_operands[op2].first;
@@ -488,7 +488,7 @@ namespace dna_dxvk {
               if (a1 == not_src) survivor = a2;
               else if (a2 == not_src) survivor = a1;
             }
-            // 模式 2: Or(And(B, A), !A) 或 Or(And(A, B), !A) -> 化简为 Cutout 条件 B
+            // 模式 2: Or(And(B, A), !A) 或 Or(And(A, B), !A) -> 化简为镂空条件 B
             else if (def_opcode[op2] == SPV_OP_LOGICAL_NOT && def_opcode[op1] == SPV_OP_LOGICAL_AND) {
               uint32_t not_src = not_operand[op2];
               uint32_t a1 = and_operands[op1].first;
@@ -496,9 +496,9 @@ namespace dna_dxvk {
               if (a1 == not_src) survivor = a2;
               else if (a2 == not_src) survivor = a1;
             }
-            // 模式 3: Or(A, And(B, !A)) 或 Or(A, And(!A, B)) -> 化简为 Cutout 条件 A（剥离 DitherNoise B）
+            // 模式 3: Or(A, And(B, !A)) 或 Or(A, And(!A, B)) -> 化简为镂空条件 A（剥离网点噪声 B）
             if (survivor == 0) survivor = check_or_and_not(op1, op2);
-            // 模式 4: Or(And(B, !A), A) 或 Or(And(!A, B), A) -> 化简为 Cutout 条件 A（剥离 DitherNoise B）
+            // 模式 4: Or(And(B, !A), A) 或 Or(And(!A, B), A) -> 化简为镂空条件 A（剥离网点噪声 B）
             if (survivor == 0) survivor = check_or_and_not(op2, op1);
 
             if (survivor > 0 && survivor < bound) {
@@ -517,7 +517,7 @@ namespace dna_dxvk {
       }
     }
 
-    // Pass 3: 下游 Demote/Kill 指令级精准定界
+    // 阶段 3: 下游 Demote/Kill 指令级精准定界
     size_t i = 5;
     uint32_t current_label = 0;
     uint32_t noped_count = 0;
@@ -540,7 +540,7 @@ namespace dna_dxvk {
           should_nop = true;
         } else if (cond > 0 && cond < bound) {
           if (is_uncoupled_cutout[cond]) {
-            // 已解耦为纯 Cutout 贴图镂空：保留丢弃指令以执行自然镂空
+            // 已解耦为纯透明度镂空：保留丢弃指令以执行自然镂空
             should_nop = false;
           } else if (is_inverted_mask[cond]) {
             // 角色近景防穿模反向消隐（Not(Alpha <= Cutoff)）：实体角色消除虚化，纯遮罩网格保留丢弃
@@ -550,7 +550,7 @@ namespace dna_dxvk {
               should_nop = true;
             }
           } else if (depends_on_sample[cond]) {
-            // 大世界植被环境 Alpha Cutout：保留贴图自然镂空
+            // 大世界植被环境 Alpha 镂空：保留贴图自然镂空
             should_nop = false;
           } else if (is_dither_noise[cond] || depends_on_frag_coord[cond] || has_char_dither_feature) {
             // 纯遮罩几何体网格（无贴图采样且字长极小）：保持丢弃

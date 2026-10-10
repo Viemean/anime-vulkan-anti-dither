@@ -22,7 +22,7 @@ void test_target_fps_clamping() {
   assert(parsed_uncap2 == 0);
   assert(engine_uncap2 == -1);
 
-  // 2. 模拟非 0 低于 30 的输入，必须自动钳位到 30
+  // 2. 验证非 0 低于 30 的输入钳位至 30
   int32_t input_low2 = 15;
   int32_t clamped2 = (input_low2 == 0 || input_low2 == -1) ? 0 : ((input_low2 < 30) ? 30 : input_low2);
   (void)clamped2;

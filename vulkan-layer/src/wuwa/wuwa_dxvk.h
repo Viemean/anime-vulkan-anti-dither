@@ -115,12 +115,12 @@ namespace wuwa_dxvk {
     bool is_particle_effect_shader = false;
 
     /*
-     * Pre-Pass 1: Detect FragCoord inputs, UE DitherTemporalAA constants, and 3x3/4x4 Bayer Matrix Tables
+     * 预处理阶段 1: 检测 FragCoord 输入、UE DitherTemporalAA 常量与 Bayer 矩阵表
      */
     std::vector<uint8_t> is_bayer_fraction(bound, 0);
 
     /*
-     * Pre-Pass 1: Detect FragCoord inputs and complete 3x3 Bayer Matrix Tables (0/9..8/9)
+     * 预处理阶段 1: 检测 FragCoord 输入与 3x3 Bayer 矩阵表 (0/9..8/9)
      */
     {
       size_t i = 5;
@@ -162,11 +162,11 @@ namespace wuwa_dxvk {
           FloatUint fu;
           fu.u = spirv_code[i + 3];
 
-          // Foliage / StaticMesh LOD signature constant (347.8345)
+          // 植被 / 静态网格 LOD 特征常量 (347.8345)
           if (fu.f >= 347.83f && fu.f <= 347.84f) {
             is_foliage_lod_shader = true;
           }
-          // 3x3 Bayer Table fractions (0/9..8/9)
+          // 3x3 Bayer 矩阵表分数 (0/9..8/9)
           else if ((fu.f >= -0.0001f && fu.f <= 0.0001f) ||
               (fu.f >= 0.1111f && fu.f <= 0.1112f) ||
               (fu.f >= 0.2222f && fu.f <= 0.2223f) ||
@@ -180,7 +180,7 @@ namespace wuwa_dxvk {
               is_bayer_fraction[res_id] = 1;
             }
           }
-          // Interleaved Gradient Noise (IGN) constants (0.06711056, 0.00583715, 52.982918)
+          // 交错梯度噪声 (IGN) 常量 (0.06711056, 0.00583715, 52.982918)
           else if ((fu.f >= 0.06711f && fu.f <= 0.06712f) ||
                    (fu.f >= 0.005837f && fu.f <= 0.005838f) ||
                    (fu.f >= 52.982f && fu.f <= 52.983f)) {
@@ -202,21 +202,21 @@ namespace wuwa_dxvk {
                 dither_const_matches++;
             }
           }
-          // Case 1: DX12 (VKD3D) 1D array of 9 floats
+          // 分支 1: DX12 (VKD3D) 9 个浮点数的 1D 数组
           if (bayer_fraction_matches >= 6 && length >= 9) {
             if (res_id < bound) {
               is_dither_const[res_id] = 1;
               has_dither_signature = true;
             }
           }
-          // Case 2: DX11 (DXVK) v4float vector composed of Bayer fractions (e.g. 0/9, 7/9, 3/9, 6/9)
+          // 分支 2: DX11 (DXVK) 由 Bayer 分数组成的 4 维浮点向量
           else if (bayer_fraction_matches >= 3 && length >= 6) {
             if (res_id < bound) {
               is_dither_const[res_id] = 1;
               has_dither_signature = true;
             }
           }
-          // Case 3: DX11 (DXVK) IGN Vector (0.06711056, 0.00583715) or array of Bayer vectors
+          // 分支 3: DX11 (DXVK) IGN 向量或 Bayer 向量数组
           else if (dither_const_matches >= 2) {
             if (res_id < bound) {
               is_dither_const[res_id] = 1;
@@ -244,7 +244,7 @@ namespace wuwa_dxvk {
     }
 
     /*
-     * Pass 1: Forward SSA Data-flow analysis
+     * 阶段 1: 前向 SSA 数据流分析
      * - Seed Dither Noise generators:
      *   1. OpDot with is_dither_const (UE4 DitherTemporalAA)
      *   2. OpInBoundsAccessChain / OpAccessChain on Bayer matrix tables
@@ -299,7 +299,7 @@ namespace wuwa_dxvk {
                    spirv_code[i + 2];
         }
 
-        // Memory load / access chain from FragCoord or Bayer Matrix
+        // 来源于 FragCoord 或 Bayer 矩阵的内存加载/访问链
         if (opcode == SPV_OP_LOAD && length >= 4) {
           uint32_t ptr_id = spirv_code[i + 3];
           if (ptr_id < bound) {
@@ -353,7 +353,7 @@ namespace wuwa_dxvk {
           }
         }
 
-        // Dither dot product detection: OpDot with is_dither_const (IGN Dither or Bayer vector)
+        // 网点点积检测: 包含网点常量的 OpDot
         if (opcode == SPV_OP_DOT && length >= 5) {
           uint32_t op1 = spirv_code[i + 3];
           uint32_t op2 = spirv_code[i + 4];
@@ -404,7 +404,7 @@ namespace wuwa_dxvk {
           }
         }
 
-        // Image sample dependency
+        // 纹理采样依赖
         if (is_image_sample_opcode(opcode)) {
           has_any_sample = true;
           if (res_id < bound && depends_on_sample[res_id] == 0) {
@@ -413,7 +413,7 @@ namespace wuwa_dxvk {
           }
         }
 
-        // Propagate is_dither_noise & depends_on_sample downstream to res_id
+        // 向下游结果 ID 传播网点噪声与纹理采样依赖属性
         if (res_id > 0 && res_id < bound) {
           uint16_t start_op = (opcode >= 19 && opcode <= 54 && opcode != 59) ? 2 : 3;
           for (uint16_t k = start_op; k < length && (i + k) < word_count; ++k) {
@@ -440,10 +440,10 @@ namespace wuwa_dxvk {
     }
 
     /*
-     * Pass 2: Precise Character/Toon Dither Neutralization & Foliage LOD Protection
+     * 阶段 2: 角色网点消除与植被 LOD 保护
      * Rule:
      * - 消除角色 Bayer 网点淡出
-     * - Foliage/StaticMesh LOD cross-fade (Signature A without Bayer) -> Preserved (Prevents tree geometric cards)
+     * - 植被/静态网格 LOD 淡出过渡: 保持保留
      * - 保留粒子球体裁剪、深度淡化与常规材质镂空
      */
     size_t i = 5;

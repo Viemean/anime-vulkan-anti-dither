@@ -107,9 +107,9 @@ void test_genshin_bayer_dither_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 3: 非 Bayer 材质 Alpha Cutout 100% 保护（不含 17.0f，Demote 完整保留）
+// 用例 3: 非 Bayer 材质 Alpha 镂空 保护验证 (Demote 保持保留)
 void test_genshin_alpha_cutout_preserved() {
-  std::cout << "[Test Genshin 3] Alpha Cutout without Bayer constant (Preserved 100%)... ";
+  std::cout << "[Test Genshin 3] Alpha 镂空 without Bayer constant (Preserved 100%)... ";
 
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
@@ -128,7 +128,7 @@ void test_genshin_alpha_cutout_preserved() {
     0,
     100,
     0,
-    // OpConstant %50 (0.5f Cutout threshold)
+    // OpConstant %50 (0.5f 镂空阈值)
     make_op(4, 43 /* OpConstant */), 1, 50, f_alpha.u,
     // OpFunction
     make_op(5, 54 /* OpFunction */), 2, 1, 0, 3,
@@ -139,7 +139,7 @@ void test_genshin_alpha_cutout_preserved() {
     make_op(4, 250 /* OpBranchConditional */), 70, 30, 40,
     // OpLabel %30
     make_op(2, 248 /* OpLabel */), 30,
-    // OpDemoteToHelperInvocation (非 Bayer，绝不能被 NOP)
+    // OpDemoteToHelperInvocation (非 Bayer 特征，预期保留)
     make_op(1, genshin_dxvk::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
     // OpLabel %40
     make_op(2, 248 /* OpLabel */), 40,

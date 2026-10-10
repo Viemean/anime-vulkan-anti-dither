@@ -172,7 +172,7 @@ namespace zzz_vkd3d {
       }
     }
 
-    // 5. 标准化日志与 Dump
+    // 5. 标准化日志与转储
     if (dither_nops > 0 || preserved_cutouts > 0) {
       game_logger::log_msg("[反虚化驱动层-ZZZ-VKD3D] 着色器: 0x%08x | 字长: %zu | 消除虚化: %u 处 | 保留正常裁剪: %u 处 | 类别: %s\n",
                            shader_hash, word_count, dither_nops, preserved_cutouts,

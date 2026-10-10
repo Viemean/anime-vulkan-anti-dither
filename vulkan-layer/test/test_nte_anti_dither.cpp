@@ -68,9 +68,9 @@ void test_nte_character_bayer_dither_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 2: 树木植被贴图 Alpha Cutout 100% 保护（依赖 OpImageSample*）
+// 用例 2: 植被贴图 Alpha 镂空 保护验证（依赖 OpImageSample*）
 void test_nte_tree_foliage_alpha_cutout_preserved() {
-  std::cout << "[Test NTE 2] Tree Foliage Alpha Cutout with Texture Sample (Preserved 100%)... ";
+  std::cout << "[Test NTE 2] Tree Foliage Alpha 镂空 with Texture Sample (Preserved 100%)... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
@@ -94,13 +94,13 @@ void test_nte_tree_foliage_alpha_cutout_preserved() {
     make_op(2, nte_vkd3d::SPV_OP_LABEL), 10,
     // OpImageSampleImplicitLod: type 4, res 15, sampled_img 2, coord 3
     make_op(5, 87), 4, 15, 2, 3,
-    // OpFOrdLessThan %16 %15 %5 (Alpha Cutout condition)
+    // OpFOrdLessThan %16 %15 %5 (Alpha 镂空 condition)
     make_op(5, 184), 6, 16, 15, 5,
     // OpBranchConditional %16 %20 %30
     make_op(4, nte_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 16, 20, 30,
     // OpLabel %20
     make_op(2, nte_vkd3d::SPV_OP_LABEL), 20,
-    // OpDemoteToHelperInvocation (依赖贴图采样，严禁消除)
+    // OpDemoteToHelperInvocation (依赖贴图采样，预期保留)
     make_op(1, nte_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
     // OpLabel %30
     make_op(2, nte_vkd3d::SPV_OP_LABEL), 30,
@@ -192,7 +192,7 @@ void test_nte_blacklist_rules() {
 
 // 用例 4: NTE 顶层分发管线阶段检测（Vertex 与 Fragment）
 void test_nte_pipeline_stage_dispatch() {
-  std::cout << "[Test NTE 4] Stage detection (Fragment vs Vertex)... ";
+  std::cout << "[Test NTE 4] Stage detection (片段 vs 顶点)... ";
   
   // 构造 Fragment Shader (OpEntryPoint Fragment %4 "main")
   std::vector<uint32_t> ps_spv = {
@@ -295,7 +295,7 @@ void test_nte_real_world_dump_shader() {
     }
   }
 
-  // 测试 shader 3: shader_5ef97b1b (角色防窥网点虚化，必须被 NOP 中和)
+  // 测试 shader 3: shader_5ef97b1b (角色网点虚化，预期置为 NOP)
   const char* path3 = "/tmp/game_anti_dither/dumps/HTGame/shader_5ef97b1b_orig.spv";
   FILE* fp3 = std::fopen(path3, "rb");
   if (fp3) {
@@ -316,7 +316,7 @@ void test_nte_real_world_dump_shader() {
     }
   }
 
-  // 测试 shader 4: shader_c66cdd66 (树木贴图 Alpha 镂空，必须 100% 保留，绝不能被修改)
+  // 测试 shader 4: shader_c66cdd66 (植被贴图 Alpha 镂空，预期保留)
   const char* path4 = "/tmp/game_anti_dither/dumps/HTGame/shader_c66cdd66_orig.spv";
   FILE* fp4 = std::fopen(path4, "rb");
   if (fp4) {
@@ -337,7 +337,7 @@ void test_nte_real_world_dump_shader() {
     }
   }
 
-  // 测试 shader 5: shader_1cb6512d (贴花/树木 SceneDepth 包围盒裁剪，必须 100% 保留，绝不能被修改)
+  // 测试 shader 5: shader_1cb6512d (包围盒深度裁剪，预期保留)
   const char* path5 = "/tmp/game_anti_dither/dumps/HTGame/shader_1cb6512d_orig.spv";
   FILE* fp5 = std::fopen(path5, "rb");
   if (fp5) {
@@ -358,7 +358,7 @@ void test_nte_real_world_dump_shader() {
     }
   }
 
-  // 测试 shader 6: shader_80ad1235 (大世界树木植被：必须 100% 豁免，保持原生代码放行，绝不能被修改)
+  // 测试 shader 6: shader_80ad1235 (大世界植被着色器，保持原样放行)
   const char* path6 = "/tmp/game_anti_dither/dumps/HTGame/shader_80ad1235_orig.spv";
   FILE* fp6 = std::fopen(path6, "rb");
   if (fp6) {
@@ -379,7 +379,7 @@ void test_nte_real_world_dump_shader() {
     }
   }
 
-  // 测试 shader 7: shader_6d741986 (角色卡通网点着色器：必须被成功中和)
+  // 测试 shader 7: shader_6d741986 (角色网点着色器，预期置为 NOP)
   const char* path7 = "/tmp/game_anti_dither/dumps/HTGame/shader_6d741986_orig.spv";
   FILE* fp7 = std::fopen(path7, "rb");
   if (fp7) {
@@ -400,7 +400,7 @@ void test_nte_real_world_dump_shader() {
     }
   }
 
-  // 测试 shader 8: shader_dc232b9a (角色眼眶贴花遮罩：必须 100% 保留镂空，绝不能修改产生黑洞)
+  // 测试 shader 8: shader_dc232b9a (角色眼眶贴花遮罩，预期保留)
   const char* path8 = "/tmp/game_anti_dither/dumps/HTGame/shader_dc232b9a_orig.spv";
   FILE* fp8 = std::fopen(path8, "rb");
   if (fp8) {
