@@ -47,8 +47,12 @@ namespace wuwa_layer {
     return game_logger::is_active();
   }
 
-  /*
-   * Accurately determines if shader was produced by DXVK or VKD3D-Proton.
+  /**
+   * @brief 判定 SPIR-V 着色器是否由 DXVK (DirectX 11) 翻译层生成。
+   *
+   * @param spirv_code SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   * @return 由 DXVK 生成返回 true；由 VKD3D-Proton 生成返回 false。
    */
   inline bool is_dxvk_translation_layer(const uint32_t* spirv_code, size_t word_count) {
     if (word_count < 5)
@@ -108,6 +112,13 @@ namespace wuwa_layer {
     return true; // Default to DXVK if not VKD3D
   }
 
+  /**
+   * @brief 《鸣潮》着色器反虚化分发入口。
+   * 自动探测翻译层类型并分发至 DXVK 或 VKD3D 处理逻辑。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;

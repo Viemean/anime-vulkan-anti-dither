@@ -35,6 +35,12 @@ namespace nte_mem {
     }
   };
 
+  /**
+   * @brief 解析 /proc/self/maps 获取当前进程内存段映射信息。
+   *
+   * @param filter_name 路径过滤关键字，为空时不过滤。
+   * @return 匹配条件的内存区域列表。
+   */
   inline std::vector<MemoryRegion> parse_process_maps(const std::string& filter_name = "") {
     std::vector<MemoryRegion> regions;
     std::ifstream maps_file("/proc/self/maps");
@@ -119,6 +125,14 @@ namespace nte_mem {
     }
   };
 
+  /**
+   * @brief 在指定内存范围内扫描匹配特定特征码签名。
+   *
+   * @param start_addr 扫描起始虚拟地址。
+   * @param size 扫描字节长度。
+   * @param pattern 预解析的特征码签名结构体。
+   * @return 首次命中的首字节虚拟地址，未找到返回 0。
+   */
   inline uintptr_t scan_memory(uintptr_t start_addr, size_t size, const SignaturePattern& pattern) {
     if (start_addr == 0 || size < pattern.size() || pattern.empty()) {
       return 0;
@@ -152,6 +166,14 @@ namespace nte_mem {
     return 0;
   }
 
+  /**
+   * @brief 在指定内存范围内扫描所有匹配特定特征签名的地址。
+   *
+   * @param start_addr 扫描起始虚拟地址。
+   * @param size 扫描字节长度。
+   * @param pattern 预解析的特征码签名结构体。
+   * @return 所有命中匹配的起始虚拟地址列表。
+   */
   inline std::vector<uintptr_t> scan_memory_all(uintptr_t start_addr, size_t size, const SignaturePattern& pattern) {
     std::vector<uintptr_t> results;
     if (start_addr == 0 || size < pattern.size() || pattern.empty()) {
@@ -185,6 +207,14 @@ namespace nte_mem {
     return results;
   }
 
+  /**
+   * @brief 在匹配模块名称的内存段中扫描匹配十六进制特征码。
+   *
+   * @param module_filter 模块路径过滤关键字。
+   * @param pattern_str 空格分隔的十六进制字节串，支持 ?? 通配符。
+   * @param executable_only 是否仅扫描具备可执行权限的段，默认为 true。
+   * @return 首次命中的首字节虚拟地址，未找到返回 0。
+   */
   inline uintptr_t scan_module_pattern(const std::string& module_filter,
                                        const std::string& pattern_str,
                                        bool executable_only = true) {
@@ -215,6 +245,16 @@ namespace nte_mem {
     return 0;
   }
 
+  /**
+   * @brief 安全修改内存页保护属性并写入操作码补丁序列。
+   *
+   * @param target_addr 目标内存起始虚拟地址。
+   * @param patch_bytes 补丁操作码缓冲区指针。
+   * @param patch_size 写入字节数量。
+   * @param original_bytes_backup 可选的原始字节备份容器指针。
+   * @param restore_exec 写入后是否恢复可读可执行权限，默认为 true。
+   * @return 写入成功返回 true；参数非法或权限修改失败返回 false。
+   */
   inline bool safe_write_memory(uintptr_t target_addr,
                                 const uint8_t* patch_bytes,
                                 size_t patch_size,
@@ -255,6 +295,14 @@ namespace nte_mem {
     return true;
   }
 
+  /**
+   * @brief 向指定内存地址填充 NOP (0x90) 指令。
+   *
+   * @param target_addr 目标内存起始虚拟地址。
+   * @param length 填充的字节长度。
+   * @param original_bytes_backup 可选的原始字节备份容器指针。
+   * @return 成功填充返回 true，否则返回 false。
+   */
   inline bool safe_nop_memory(uintptr_t target_addr, size_t length, std::vector<uint8_t>* original_bytes_backup = nullptr) {
     if (target_addr == 0 || length == 0) return false;
     std::vector<uint8_t> nops(length, 0x90);
@@ -266,6 +314,12 @@ namespace nte_mem {
     uintptr_t rva;
   };
 
+  /**
+   * @brief 应用《异环》相机距离防模型隐藏内存补丁。
+   * 定位主模块代码段并根据特征码改写遮挡分支，跳过隐藏调用。
+   *
+   * @return 全部补丁成功命中并写入返回 true，否则返回 false。
+   */
   inline bool apply_anti_hide_camera_patch() {
     auto regions = parse_process_maps();
     uintptr_t code_start = 0;
@@ -292,12 +346,9 @@ namespace nte_mem {
       module_base = code_start - 0x1000;
     }
 
-    // 1. CameraDistanceFadeAlpha::ForceOpaqueBranch (0x07BB8BC6):
-    //    原版汇编: test r9, r9; jne +0D; movss xmm0, [1.0f]; jmp epilogue (恢复 rbx, rbp, rsi, rdi 并 ret)
-    //    将 jne (75 0D) 改为 NOP (90 90)，使其无条件走函数内置的 1.0f 常量加载与安全栈帧恢复路径。
-    //    既能确保角色全视角 100% 不透明，又完美遵守非叶子函数堆栈 ABI
-    // 2. CameraOcclusion::BranchGateSkipHide (0x07BC010C):
-    //    将条件跳转 ja (77 1A) 改为无条件跳转 jmp (EB 1A)，直接跳过 ExecuteHideCharacter 调用。
+    // 补丁目标定义:
+    // 1. CameraDistanceFadeAlpha: 将条件跳转改为 NOP，加载 1.0f 浮点常量并返回
+    // 2. CameraOcclusion: 将条件跳转改为无条件跳转，跳过模型隐藏调用
     struct MemoryPatchEntry {
       const char* name;
       uintptr_t rva;
@@ -308,45 +359,35 @@ namespace nte_mem {
     };
 
     const MemoryPatchEntry targets[] = {
-      // 1. 距离淡化计算函数内置分支：恒定走 1.0f 路径与栈帧安全返回
-      //    原版: 4D 85 C9 (test r9, r9) 75 0D (jne +0D) ...
-      //    修改点位于特征码起始位置 +3 字节处，将 75 0D 改为 90 90 (NOP NOP)
+      // 1. 距离淡化分支改写
       {
         "CameraDistanceFadeAlpha::ForceOpaqueBranch",
         0x07BB8F56, // 更新后新版 RVA (旧版: 0x07BB8BC6)
         { 0x90, 0x90 },
         { 0x75, 0x0D },
         {
-          // 候选 1: 高精度通配符长模式 (容忍跳转偏移 ?? 与浮点池常量寻址 [rip+????])
           "4D 85 C9 75 ?? F3 0F 10 ? ? ? ?",
-          // 候选 2: 双态通配符模式 (修改位置为 ?? ??，未补丁或已补丁皆可命中)
           "4D 85 C9 ?? ?? F3 0F 10",
-          // 候选 3: 宽松寄存器签名 (容忍 r9 寄存器微调分配)
           "4D 85 ?? 75 ?? F3 0F 10"
         },
         3
       },
-      // 2. 相机透明度隐藏判断门禁：将 ja 改为 jmp，跳过 ExecuteHideCharacter 调用
-      //    原版: 77 1A (ja +1A) 4C 8B C7 48 8B CB ...
-      //    修改点位于特征码起始位置 (+0 字节)，将 77 1A 改为 EB 1A (jmp +1A)
+      // 2. 相机透明度隐藏分支改写
       {
         "CameraOcclusion::BranchGateSkipHide",
         0x07BC049C, // 更新后新版 RVA (旧版: 0x07BC010C)
         { 0xEB, 0x1A },
         { 0x77, 0x1A },
         {
-          // 候选 1: 双态通配符模式 (修改位置为 ?? ??，未补丁或已补丁均可命中)
           "?? ?? 4C 8B C7 48 8B CB",
-          // 候选 2: 容忍跳转偏移变化的原始特征
           "77 ?? 4C 8B C7 48 8B CB",
-          // 候选 3: 全字节保底签名
           "77 1A 4C 8B C7 48 8B CB"
         },
         0
       }
     };
 
-    // 缓存已解析定位的有效内存地址，保障多次轮询下的幂等性
+    // 缓存已定位的地址
     static std::unordered_map<std::string, uintptr_t> s_resolved_addrs;
 
     bool all_patched = true;
@@ -362,7 +403,7 @@ namespace nte_mem {
 
       bool target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
 
-      // 检查是否已经打过该补丁 (幂等性保护)
+      // 检查是否已应用补丁
       if (target_valid) {
         bool already_patched = true;
         const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
@@ -378,7 +419,7 @@ namespace nte_mem {
         }
       }
 
-      // 前置一致性检查：校验目标地址处的预期机器码是否匹配
+      // 校验目标地址原始机器码
       bool orig_matched = false;
       if (target_valid) {
         orig_matched = true;
@@ -391,7 +432,7 @@ namespace nte_mem {
         }
       }
 
-      // 若当前地址不匹配预期原始机器码，触发通配符级联扫描 (应对跨版本代码漂移)
+      // 校验不匹配时触发特征码扫描
       if (!orig_matched) {
         game_logger::log_msg("[NTE-Addon] 目标 %s 当前地址 (0x%lx) 预期原始机器码不匹配，触发通配符级联扫描...\n",
                              tgt.name, target_addr);
@@ -412,7 +453,7 @@ namespace nte_mem {
                                  tgt.name, target_addr, new_rva, tgt.pattern_offset);
             target_valid = (target_addr >= code_start && target_addr + tgt.patch_bytes.size() <= code_end);
 
-            // 再次检查扫描出的地址是否已补丁 (双态匹配支持)
+            // 检查扫描目标地址是否已补丁
             if (target_valid) {
               bool already_patched = true;
               const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
@@ -446,7 +487,7 @@ namespace nte_mem {
         continue;
       }
 
-      // 严格安全核验：目标地址当前字节必须 100% 匹配预期原始操作码
+      // 核验目标地址当前操作码是否匹配预期原始字节序列
       const uint8_t* cur_ptr = reinterpret_cast<const uint8_t*>(target_addr);
       bool bytes_verified = true;
       for (size_t i = 0; i < tgt.expected_orig_bytes.size(); ++i) {

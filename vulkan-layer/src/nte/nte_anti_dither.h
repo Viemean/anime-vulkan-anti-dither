@@ -57,6 +57,13 @@ namespace nte_layer {
     return ShaderStage::Unknown;
   }
 
+  /**
+   * @brief 《异环》(NTE) 着色器反虚化分发入口。
+   * 分发着色器至 VKD3D-Proton 针对性反虚化处理。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;
@@ -71,8 +78,7 @@ namespace nte_layer {
     ShaderStage stage = detect_shader_stage(spirv_code, word_count);
 
     if (stage == ShaderStage::Fragment) {
-      // 100% 专注处理 VKD3D-Proton (DirectX 12)
-      nte_vkd3d::process_spirv_anti_dither(spirv_code, word_count);
+          nte_vkd3d::process_spirv_anti_dither(spirv_code, word_count);
     } else if (stage == ShaderStage::Vertex && game_logger::g_dump_enabled) {
       // 抓取并导出极端仰角下的角色 Vertex Shader（用于排查 WPO 顶点坍缩导致的角色全身消失）
       game_logger::dump_shader_bundle(spirv_code, word_count,

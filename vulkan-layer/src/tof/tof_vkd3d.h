@@ -70,12 +70,18 @@ namespace tof_vkd3d {
    *
    * 处理逻辑：
    * 1. 材质分类定界与保护底线：
-   *    - 大世界植被与树叶材质：保持纹理透明度镂空（Alpha Cutout），凡条件依赖纹理采样的 Demote 100% 保护，绝不中和。
+   *    - 保持纹理透明度镂空（Alpha Cutout），凡条件依赖纹理采样的 Demote 保留原始指令。
    *    - 角色卡通材质与消隐分支：上游解耦 NMin/FMin 与 FAdd 中的 DitherTemporalAA / Bayer 点阵，下游中和 1000.0f 噪声与点阵 Demote。
    * 2. 执行策略：
    *    - 基于 SSA 数据流双向传播追踪，区分贴图采样与屏幕空间噪声；
    *    - 上游解耦彻底剥离 GBuffer 属性与透明通道中的棋盘格；
    *    - 下游定向中和消除像素丢弃。
+   */
+  /**
+   * @brief 《幻塔》(TOF) VKD3D-Proton 片段着色器反虚化处理。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
@@ -296,7 +302,7 @@ namespace tof_vkd3d {
           }
         }
 
-        // 通用数据流级联传播；排除 AccessChain 避免索引污染，贴图采样产物不继承噪声属性
+        // 通用数据流级联传播，排除 AccessChain
         if (res_id > 0 && res_id < bound && opcode != SPV_OP_ACCESS_CHAIN && opcode != 66) {
           uint16_t start_op = (opcode == SPV_OP_EXT_INST) ? 5 : 3;
           uint16_t end_op = length;
@@ -325,7 +331,7 @@ namespace tof_vkd3d {
       }
     }
 
-    // 排除无纹理采样的小字长遮罩与深度着色器 (保护眼眶镂空避免黑色空洞)
+    // 排除无纹理采样的遮罩与深度着色器
     if (!has_any_sample && word_count < 800 && !is_force_mode) {
       if (game_logger::g_dump_enabled) {
         game_logger::dump_shader_bundle(orig_copy.data(), orig_copy.size(),
@@ -381,7 +387,7 @@ namespace tof_vkd3d {
           }
         }
       }
-      // 下游 Demote 精准决策与保护铁律
+      // 下游丢弃指令中和与保留决策
       else if (is_discard_opcode(opcode)) {
         uint32_t cond = (current_label < bound) ? cond_for_label[current_label] : 0;
         bool should_nop = false;
@@ -389,7 +395,7 @@ namespace tof_vkd3d {
         if (is_force_mode) {
           should_nop = true;
         } else if (cond > 0 && cond < bound) {
-          // 保护铁律：凡条件依赖贴图采样的 Alpha Cutout，绝对保留，严禁 NOP
+          // 条件依赖贴图采样的指令予以保留
           if (depends_on_sample[cond]) {
             should_nop = false;
           } else if (is_dither_noise[cond]) {

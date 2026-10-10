@@ -73,6 +73,13 @@ namespace nte_vkd3d {
    * 2. 执行策略：
    *    - 基于物料字长规模与数据流依赖进行范围隔离与噪声剥离。
    */
+  /**
+   * @brief 《异环》(NTE) VKD3D-Proton (DirectX 12) 片段着色器反虚化处理。
+   * 追踪受网点噪声控制的条件分支并中和丢弃指令，保留常规材质镂空。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;
@@ -96,7 +103,7 @@ namespace nte_vkd3d {
 
     bool is_force_mode = (game_logger::g_force_hashes.count(shader_hash) > 0);
 
-    // 排除角色眼眶阴影与面部贴花遮罩（Eye Socket Decal Mask，保护眼部镂空避免黑色空洞）
+    // 排除眼眶阴影与贴花遮罩
     static const std::unordered_set<uint32_t> k_eye_socket_decal_hashes = {
       0x08b19454, 0xd583ec38, 0x717a7d1a, 0x86b5f8ee,
       0x50e17c06, 0x9ed97ff9, 0xe5147a5f, 0xdc232b9a, 0x9d19e033
@@ -256,7 +263,7 @@ namespace nte_vkd3d {
       }
     }
 
-    // 若未匹配到任何 Bayer 点阵或 IGN 噪声特征，直接跳过，避免误杀眼部/贴花等正常遮罩
+    // 未匹配到 Bayer 点阵或 IGN 噪声特征时跳过
     if (!has_dither_signature && !is_force_mode) {
       return;
     }

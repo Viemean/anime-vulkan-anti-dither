@@ -7,6 +7,13 @@
 
 namespace dna_layer {
 
+  /**
+   * @brief 判定 SPIR-V 着色器是否由 DXVK (DirectX 11) 翻译层生成。
+   *
+   * @param spirv_code SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   * @return 由 DXVK 生成返回 true；由 VKD3D-Proton 生成返回 false。
+   */
   inline bool is_dxvk_translation_layer(const uint32_t* spirv_code, size_t word_count) {
     if (word_count < 5)
       return false;
@@ -66,6 +73,12 @@ namespace dna_layer {
     return true; // 默认非 VKD3D 则走 DXVK
   }
 
+  /**
+   * @brief 《二重螺旋》(DNA) 着色器反虚化分发入口。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;

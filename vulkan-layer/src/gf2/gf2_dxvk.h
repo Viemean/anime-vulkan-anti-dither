@@ -65,8 +65,14 @@ namespace gf2_dxvk {
    *    - 头部/特定部位：FragCoord 屏幕空间坐标与 4x4 / 8x8 Bayer 矩阵点阵；
    *    - 角色身体/皮肤：3D Hash 噪波 (0.1031 与 31.32 散列) 消融；
    *    - 角色衣物/配件：Uniform 缓冲区动态消融阈值 (NMin/FMin) 及 cb2 Cutoff 动态裁剪；
-   * 2. 严格保护环境物体：植被树木与铁丝网等基于固定常数 (如 0.5f) 的 Alpha Cutout 100% 完整保留；
+   * 2. 环境物体保护：保留基于固定常数 (如 0.5f) 的 Alpha Cutout 镂空；
    * 3. 针对命中条件丢弃指令：OpKill 执行分支重定向保持 Terminator，OpDemote 替换为 NOP，解决穿透消失问题。
+   */
+  /**
+   * @brief 《少女前线2：追放》(GF2) DXVK 片段着色器反虚化处理。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
@@ -320,7 +326,7 @@ namespace gf2_dxvk {
     // 判定是否属于角色模型着色器 (二次元卡通渲染必须依赖 FrontFacing 判断正反面与描边，或依赖 FragCoord 计算屏幕网点)
     bool is_character_shader = (has_front_face || has_any_frag_coord);
 
-    // 若非角色物体 (植物/树叶/大树/盆栽/草地/建筑/特效绝不包含 FrontFacing 与 FragCoord)，100% 严格保护，放行不修改
+    // 未引用 FrontFacing 与 FragCoord 的非角色物体着色器保持原样放行
     if (!is_character_shader && !is_force_mode) {
       if (game_logger::g_dump_enabled && has_any_discard) {
         game_logger::dump_shader_bundle(spirv_code, word_count,

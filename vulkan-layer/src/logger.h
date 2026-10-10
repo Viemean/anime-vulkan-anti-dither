@@ -7,8 +7,7 @@
 /**
  * @brief 驱动层日志与配置门面头文件 (Facade)
  * 
- * 保持对既有模块和单测的 100% 命名空间兼容性 (namespace game_logger)，
- * 底层实现已完全拆分至 core/config.cpp 与 core/logger.cpp 独立编译单元中。
+ * 提供与既有命名空间 game_logger 的映射，底层实现位于 core/config.cpp 与 core/logger.cpp。
  */
 namespace game_logger {
 

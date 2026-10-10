@@ -75,8 +75,14 @@ namespace tof_dxvk {
    *    - 支持通过 OpCompositeExtract 提取的标量噪声追踪。
    * 2. 目标达成与保护铁律：
    *    - 角色 Toon/DitherTemporalAA/近景消隐分支精准消除；
-   *    - 凡依赖贴图采样的 Alpha Cutout（植被/树木/树叶/布料边缘）100% 绝对保护；
+   *    - 依赖贴图采样的 Alpha Cutout（植被/树木/树叶/布料边缘）保留原始指令；
    *    - 排除小字长纯写 0 遮罩着色器，防止产生黑色空洞。
+   */
+  /**
+   * @brief 《幻塔》(TOF) DXVK 片段着色器反虚化处理。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
@@ -238,7 +244,7 @@ namespace tof_dxvk {
       return;
     }
 
-    // Pass 2a: FragCoord 依赖先导收敛传播 (确保屏幕空间坐标提前收敛，防止误将噪声贴图采样判定为材质采样)
+    // Pass 2a: FragCoord 依赖收敛传播
     bool fc_changed = true;
     uint32_t fc_iteration = 0;
     while (fc_changed && fc_iteration < 20) {
@@ -433,7 +439,7 @@ namespace tof_dxvk {
           }
         }
 
-        // 通用数据流级联传播；排除 AccessChain 与 SampledImage 避免污染
+        // 通用数据流级联传播，排除 AccessChain 与 SampledImage
         if (res_id > 0 && res_id < bound && opcode != SPV_OP_ACCESS_CHAIN && opcode != 66 && opcode != 86) {
           uint16_t start_op = (opcode == SPV_OP_EXT_INST) ? 5 : 3;
           bool parent_is_noise = false;
@@ -467,7 +473,7 @@ namespace tof_dxvk {
       }
     }
 
-    // 排除无纹理采样的小字长遮罩与深度着色器 (保护眼眶镂空避免黑色空洞)
+    // 排除无纹理采样的遮罩与深度着色器
     if (!has_any_sample && word_count < 800 && !is_force_mode) {
       if (game_logger::g_dump_enabled) {
         game_logger::dump_shader_bundle(orig_copy.data(), orig_copy.size(),
@@ -525,7 +531,7 @@ namespace tof_dxvk {
           }
         }
       }
-      // 下游 Demote/Kill 精准决策与保护铁律
+      // 下游丢弃指令中和与保留决策
       else if (is_discard_opcode(opcode)) {
         uint32_t cond = (current_label < bound) ? cond_for_label[current_label] : 0;
         bool should_nop = false;
@@ -533,7 +539,7 @@ namespace tof_dxvk {
         if (is_force_mode) {
           should_nop = true;
         } else if (cond > 0 && cond < bound) {
-          // 保护铁律：凡条件依赖贴图采样的 Alpha Cutout，绝对保留，严禁 NOP
+          // 条件依赖贴图采样的指令予以保留
           if (depends_on_sample[cond]) {
             should_nop = false;
           } else if (is_dither_noise[cond]) {

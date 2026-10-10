@@ -64,6 +64,13 @@ namespace wuwa_vkd3d {
     return (opcode >= 87 && opcode <= 107) || (opcode >= 305 && opcode <= 318) || opcode == 86;
   }
 
+  /**
+   * @brief 《鸣潮》VKD3D-Proton (DirectX 12) 片段着色器反虚化处理。
+   * 解耦淡出网点与纹理采样，中和 Bayer 网点丢弃指令并保留常规材质镂空。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;
@@ -80,7 +87,7 @@ namespace wuwa_vkd3d {
 
     uint32_t shader_hash = game_logger::compute_spirv_hash(spirv_code, word_count);
 
-    // Blacklist check
+    // 黑名单过滤
     if (game_logger::g_exclude_hashes.count(shader_hash) > 0) {
       game_logger::log_msg("[Anti-Dither-Layer] Shader 0x%08x excluded by blacklist rule\n", shader_hash);
       return;
@@ -88,10 +95,7 @@ namespace wuwa_vkd3d {
 
     bool is_force_mode = (game_logger::g_force_hashes.count(shader_hash) > 0);
 
-    // Gate 1: Check if shader contains any discard / demote opcodes.
-    // If a shader does not perform any pixel discard, it is an opaque/unmasked material.
-    // We NEVER modify non-demote shaders (e.g. solid meshes, monstera foliage, lighting), 100% untouched!
-    bool has_any_discard_opcode = false;
+            bool has_any_discard_opcode = false;
     for (size_t k = 5; k < word_count; ) {
       uint32_t w = spirv_code[k];
       uint16_t op = w & 0xFFFF;
@@ -250,8 +254,7 @@ namespace wuwa_vkd3d {
     }
 
     if ((is_foliage_lod_shader || is_particle_effect_shader) && !is_force_mode) {
-      // 100% Protect Foliage LOD crossfades and Particle/Ribbon/Niagara attack effects
-      return;
+        return;
     }
 
     /*
@@ -478,18 +481,16 @@ namespace wuwa_vkd3d {
     /*
      * Pass 2: Precise Character/Toon Dither Neutralization & Foliage LOD Protection
      * Rule:
-     * - Character/Toon Bayer Dither Noise -> Neutralized to OpNop (100% smooth camera close-ups)
+     * - 消除角色 Bayer 网点淡出
      * - Foliage/StaticMesh LOD cross-fade (Signature A without Bayer) -> Preserved (Prevents tree geometric cards)
-     * - Particle sphere bounding clips, depth fades, vertex alpha, material cutouts -> Preserved 100%
+     * - 保留粒子球体裁剪、深度淡化与常规材质镂空
      */
     size_t i = 5;
     uint32_t current_label = 0;
     uint32_t demote_modified_count = 0;
     uint32_t demote_preserved_count = 0;
-    // Step A: Trace backward slice from Demote conditions only!
-    // CRITICAL: We NEVER touch NMins in color clamps, shadow maps, lighting or SV_Target outputs!
-    // NMins are ONLY uncoupled if they directly participate in computing a demote condition.
-    std::vector<uint8_t> is_in_demote_slice(bound, 0);
+    // 阶段 A: 反向切片追踪丢弃条件
+        std::vector<uint8_t> is_in_demote_slice(bound, 0);
     std::vector<uint8_t> is_const_zero_or_neg(bound, 0);
 
     // Identify zero or negative constants
@@ -566,7 +567,7 @@ namespace wuwa_vkd3d {
       }
     }
 
-    // Step A.1: Uncouple ONLY NMins that belong to the demote slice and are NOT clamped to zero
+    // 阶段 A.1: 解耦切片内 NMin 指令
     uint32_t nmin_uncoupled_count = 0;
     i = 5;
     while (i < word_count) {
@@ -595,7 +596,7 @@ namespace wuwa_vkd3d {
               uint32_t cand = op1_dither ? op2 : op1;
               bool cand_sample = op1_dither ? op2_sample : op1_sample;
               bool cand_dither = op1_dither ? op2_dither : op1_dither;
-              // Only uncouple when candidate is a genuine texture alpha cutout, never scalar clamp constants
+              // 校验解耦候选操作数是否来源于纹理采样
               if (cand_sample && !cand_dither) {
                 survivor_op = cand;
               }
@@ -608,7 +609,7 @@ namespace wuwa_vkd3d {
               }
             }
 
-            // Ensure survivor is a valid cutout, NOT a zero/negative clamp constant!
+            // 校验非零常量
             if (survivor_op > 0 && survivor_op < bound && !is_const_zero_or_neg[survivor_op]) {
               spirv_code[i] = (4 << 16) | SPV_OP_COPY_OBJECT;
               spirv_code[i + 3] = survivor_op;
@@ -625,7 +626,7 @@ namespace wuwa_vkd3d {
       i += length;
     }
 
-    // If NMin was uncoupled, recompute is_dither_noise so downstream demote conditions see pure Cutout!
+    // 重算下游数据流依赖
     if (nmin_uncoupled_count > 0) {
       for (size_t k = 0; k < bound; ++k) is_dither_noise[k] = 0;
       bool dither_data_changed = true;
@@ -686,8 +687,8 @@ namespace wuwa_vkd3d {
       }
     }
 
-    // Step B: NOP pure dither demotes (Character close-up dither)
-    // CRITICAL: Any condition that depends on texture sample is ALPHA CUTOUT -> NEVER NOP!
+    // 阶段 B: 中和网点丢弃指令
+    // 依赖纹理采样的分支条件判定为常规材质镂空，予以保留
     i = 5;
     while (i < word_count) {
       uint32_t word = spirv_code[i];

@@ -77,7 +77,7 @@ namespace game_core {
         return;
       }
 
-      // 启动器与辅助进程防护：严禁对 NTELauncher/Browser/Update 等进程执行热补丁
+      // 排除启动器与辅助子进程
       std::string proc = game_core::get_clean_process_name();
       if (proc.find("Launcher") != std::string::npos ||
           proc.find("Browser") != std::string::npos ||
@@ -245,7 +245,7 @@ namespace game_core {
       return;
     }
     std::call_once(*s_init_flag, [&]() {
-      // 提取纯文件名 (Base Name) 并剔除 .exe 扩展名，消除父目录路径字符串干扰
+      // 提取基准文件名并移除 .exe 扩展名
       std::string_view full_name = process_name;
       size_t last_slash = full_name.find_last_of("/\\");
       std::string_view base_name = (last_slash == std::string_view::npos) ? full_name : full_name.substr(last_slash + 1);
@@ -265,10 +265,10 @@ namespace game_core {
           std::string_view kw = profile.process_keywords[i];
           bool matched = false;
           if (kw.size() <= 4) {
-            // 短关键字：必须与纯可执行文件名完全相同 (如 "Star", "BH3", "wuwa")
+            // 短关键字精确匹配
             matched = (base_name == kw);
           } else {
-            // 长关键字：允许作为纯文件名的子串 (如 "GenshinImpact", "EM-Win64-Shipping", "ZenlessZoneZero")
+            // 长关键字子串匹配
             matched = (base_name.find(kw) != std::string_view::npos);
           }
 
@@ -276,7 +276,7 @@ namespace game_core {
             s_active_profile = &profile;
             s_active_id = profile.id;
 
-            // 预先绑定高频指令过滤指针 (消除运行期双重条件判断)
+            // 绑定高频指令过滤指针
             if (profile.should_skip_draw_indexed) {
               g_active_skip_draw_indexed = profile.should_skip_draw_indexed;
             }

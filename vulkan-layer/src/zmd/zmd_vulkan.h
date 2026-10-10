@@ -69,6 +69,13 @@ namespace zmd_vulkan {
    * 3. 严格隔离贴图采样（Alpha Cutout），保护大世界铁丝网（Fence）与植被；
    * 4. 在开启 ANTI_DITHER_DUMP 时完整导出供进一步逆向。
    */
+  /**
+   * @brief 《明日方舟：终末地》(ZMD) 原生 Vulkan 片段着色器反虚化处理。
+   * 识别抖动矩阵特征并隔离贴图采样，中和网点丢弃指令。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;
@@ -255,7 +262,7 @@ namespace zmd_vulkan {
           res_id = (opcode >= 19 && opcode <= 39) ? spirv_code[i + 1] : spirv_code[i + 2];
         }
 
-        // 纹理采样边界隔离：输出绝对不标记为 Dither 噪声
+        // 纹理采样输出不继承噪声标记
         if (is_image_sample_opcode(opcode) && length >= 5) {
           uint32_t coord_id = spirv_code[i + 4];
           if (coord_id < bound && !depends_on_frag_coord[coord_id]) {
@@ -388,7 +395,7 @@ namespace zmd_vulkan {
     uint32_t noped_count = 0;
     uint32_t preserved_cutout_count = 0;
 
-    // 1. 条件分支重定向: 跳过 Dither 对应的 OpKill 基本块，保持基本块 Terminator 完整
+    // 1. 条件分支重定向: 跳过网点丢弃基本块
     for (const auto& br : branch_insts) {
       bool true_has_kill = (br.true_label < bound && label_has_kill[br.true_label]);
       bool false_has_kill = (br.false_label < bound && label_has_kill[br.false_label]);

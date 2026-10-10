@@ -62,8 +62,15 @@ namespace zmd_dxvk {
    * 特性：
    * 1. 适配 DXVK 将 DXBC 翻译为 SPIR-V 的典型结构 (icb / cb 缓冲、FragCoord 与点阵噪声)；
    * 2. 识别 Bayer 4x4 / 8x8 矩阵系数及 IGN 噪波；
-   * 3. 基于 SSA 数据流隔离纹理采样，100% 保护铁丝网栅栏与植被镂空 (Alpha Cutout)；
+   * 3. 基于 SSA 数据流隔离纹理采样，保护铁丝网栅栏与植被镂空 (Alpha Cutout)；
    * 4. 针对 OpKill 采用分支重定向保护 CFG 基本块 Terminator，针对 OpDemote 进行定向置 NOP。
+   */
+  /**
+   * @brief 《明日方舟：终末地》(ZMD) DXVK (DirectX 11) 片段着色器反虚化处理。
+   * 识别 Bayer 与 IGN 噪波特征，中和受噪波驱动的丢弃指令并保护材质镂空。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
@@ -253,7 +260,7 @@ namespace zmd_dxvk {
           res_id = (opcode >= 19 && opcode <= 39) ? spirv_code[i + 1] : spirv_code[i + 2];
         }
 
-        // 纹理采样边界隔离：输出绝对不标记为 Dither 噪声
+        // 纹理采样输出不继承噪声标记
         if (is_image_sample_opcode(opcode) && length >= 5) {
           uint32_t coord_id = spirv_code[i + 4];
           if (coord_id < bound && !depends_on_frag_coord[coord_id]) {
@@ -386,7 +393,7 @@ namespace zmd_dxvk {
     uint32_t noped_count = 0;
     uint32_t preserved_cutout_count = 0;
 
-    // 1. 条件分支重定向: 跳过 Dither 对应的 OpKill 基本块，保持基本块 Terminator 完整
+    // 1. 条件分支重定向: 跳过网点丢弃基本块
     for (const auto& br : branch_insts) {
       bool true_has_kill = (br.true_label < bound && label_has_kill[br.true_label]);
       bool false_has_kill = (br.false_label < bound && label_has_kill[br.false_label]);

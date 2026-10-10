@@ -85,6 +85,12 @@ namespace dna_vkd3d {
    *   大世界远景树木处于 LOD 渐变过渡区间时，因 LOD 噪声与镂空裁剪存在耦合，过渡期退化为实心多边形卡片；
    *   拉近距离进入 LOD 0 且退出过渡区间后恢复正常。
    */
+  /**
+   * @brief 《二重螺旋》(DNA) VKD3D-Proton 片段着色器反虚化处理。
+   *
+   * @param spirv_code SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;
@@ -318,7 +324,7 @@ namespace dna_vkd3d {
           }
         }
 
-        // 通用数据流级联传播；排除 AccessChain 避免索引污染，贴图采样产物不继承噪声属性
+        // 通用数据流级联传播，排除 AccessChain，贴图采样产物不继承噪声属性
         if (res_id > 0 && res_id < bound && opcode != SPV_OP_ACCESS_CHAIN && opcode != 66) {
           uint16_t start_op = (opcode == SPV_OP_EXT_INST) ? 5 : 3;
           uint16_t end_op = length;
@@ -353,7 +359,7 @@ namespace dna_vkd3d {
 
     // Pass 2.5: Demote 切片逆向追溯与上游复合 Dither 噪声解耦 (Upstream Uncoupling)
     // 借鉴 WUWA / TOF / NTE 成熟架构：当材质公式中存在 OpFMul(TextureAlpha, DitherNoise) 或 FMin/NMin 时，
-    // 将其改写为 OpCopyObject(TextureAlpha)，彻底剥离近景相机点阵渗透，同时 100% 保护材质原始 Cutout！
+    // 改写为 OpCopyObject(TextureAlpha)，解耦相机网点淡出并保留材质常规镂空
     std::vector<uint8_t> is_in_demote_slice(bound, 0);
     {
       size_t k = 5;

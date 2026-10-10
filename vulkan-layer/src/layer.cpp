@@ -17,11 +17,22 @@
 
 namespace {
 
-  // Helper to extract dispatch key from dispatchable handles
+  /**
+   * @brief 从可分发 Vulkan 对象句柄中提取调度键（首地址指针）。
+   *
+   * @param object Vulkan 对象句柄指针。
+   * @return 分发键指针。
+   */
   inline void* get_dispatch_key(const void* object) {
     return *(void**)object;
   }
 
+  /**
+   * @brief 路由 SPIR-V 字节码至当前激活游戏画像的着色器改写接口。
+   *
+   * @param code SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void dispatch_anti_dither_process(uint32_t* code, size_t word_count) {
     auto profile = game_core::get_active_profile();
     if (profile && profile->process_spirv) {
@@ -75,6 +86,15 @@ namespace {
 } // namespace
 
 // Intercepted Device Functions
+/**
+ * @brief 拦截 vkCreateShaderModule 创建流程，在着色器模块编译前执行 SPIR-V 字节码改写。
+ *
+ * @param device 逻辑设备句柄。
+ * @param pCreateInfo 着色器模块创建信息结构体指针。
+ * @param pAllocator 自定义内存分配器回调指针。
+ * @param pShaderModule 输出的着色器模块句柄指针。
+ * @return Vulkan 执行状态码，若创建成功返回 VK_SUCCESS。
+ */
 static VKAPI_ATTR VkResult VKAPI_CALL wuwa_vkCreateShaderModule(
     VkDevice                                    device,
     const VkShaderModuleCreateInfo*             pCreateInfo,
@@ -246,6 +266,16 @@ static VKAPI_ATTR void VKAPI_CALL wuwa_vkDestroyDevice(
     dev_data.destroy_device(device, pAllocator);
 }
 
+/**
+ * @brief 拦截 vkCmdDrawIndexed 绘制调用，基于活动过滤函数跳过特定索引绘制命令。
+ *
+ * @param commandBuffer 命令缓冲区句柄。
+ * @param indexCount 绘制索引数量。
+ * @param instanceCount 绘制实例数量。
+ * @param firstIndex 起始索引偏移。
+ * @param vertexOffset 顶点数组基址偏移。
+ * @param firstInstance 起始实例编号。
+ */
 static VKAPI_ATTR void VKAPI_CALL wuwa_vkCmdDrawIndexed(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    indexCount,

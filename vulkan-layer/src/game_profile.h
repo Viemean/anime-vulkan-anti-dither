@@ -50,13 +50,42 @@ namespace game_core {
     void (*on_device_destroyed)(VkDevice device) = nullptr;
   };
 
-  // 全局高频访问快速函数指针 (零开销内联，非目标游戏下冷分支开销为 0)
+  /**
+   * @brief 全局高频指令过滤函数指针，在 vkCmdDrawIndexed 热路径中由驱动层直接调用。
+   */
   inline bool (*g_active_skip_draw_indexed)(uint32_t index_count, uint32_t first_index, int32_t vertex_offset) = nullptr;
 
+  /**
+   * @brief 根据进程名匹配并初始化对应游戏的画像配置与钩子函数。
+   *
+   * @param process_name 当前进程可执行文件名。
+   */
   void init_game_profiles(std::string_view process_name);
+
+  /**
+   * @brief 重置激活画像状态与过滤指针，用于单元测试环境隔离。
+   */
   void reset_game_profiles_for_test();
+
+  /**
+   * @brief 获取当前激活的游戏画像指针。
+   *
+   * @return 若匹配成功返回画像结构体指针，未匹配返回 nullptr。
+   */
   const GameProfile* get_active_profile();
+
+  /**
+   * @brief 获取当前激活的游戏枚举标识符。
+   *
+   * @return 匹配成功返回对应的 GameId，未匹配返回 GameId::Unknown。
+   */
   GameId get_active_game_id();
+
+  /**
+   * @brief 查询当前进程是否命中已知受支持的游戏画像。
+   *
+   * @return 命中已知游戏返回 true，否则返回 false。
+   */
   bool is_game_active();
 
 } // namespace game_core

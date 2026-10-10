@@ -37,6 +37,12 @@ namespace mihoyo_fps {
     }
   };
 
+  /**
+   * @brief 解析 /proc/self/maps 提取当前进程内存段信息。
+   *
+   * @param filter_name 路径过滤关键字，为空时提取全部内存段。
+   * @return 匹配条件的内存区域列表。
+   */
   inline std::vector<MemoryRegion> parse_process_maps(const std::string& filter_name = "") {
     std::vector<MemoryRegion> regions;
     std::ifstream maps_file("/proc/self/maps");
@@ -120,6 +126,14 @@ namespace mihoyo_fps {
     }
   };
 
+  /**
+   * @brief 在指定内存范围内扫描匹配特定特征码签名。
+   *
+   * @param start_addr 扫描起始虚拟地址。
+   * @param size 扫描字节长度。
+   * @param pattern 预解析的特征码签名结构体。
+   * @return 首次命中的首字节虚拟地址，未找到返回 0。
+   */
   inline uintptr_t scan_memory(uintptr_t start_addr, size_t size, const SignaturePattern& pattern) {
     if (start_addr == 0 || size < pattern.size() || pattern.empty()) {
       return 0;
@@ -185,6 +199,13 @@ namespace mihoyo_fps {
     return results;
   }
 
+  /**
+   * @brief 修改目标内存页保护权限并安全写入 32 位整型值。
+   *
+   * @param target_addr 目标内存虚拟地址。
+   * @param val 欲写入的 32 位整型数值。
+   * @return 写入成功返回 true；若地址非法或提权失败返回 false。
+   */
   inline bool safe_write_int32(uintptr_t target_addr, int32_t val) {
     if (target_addr == 0) return false;
 
@@ -195,15 +216,13 @@ namespace mihoyo_fps {
     uintptr_t page_end = (target_addr + sizeof(int32_t) + page_size - 1) & ~(static_cast<uintptr_t>(page_size) - 1);
     size_t protect_len = page_end - page_start;
 
-    // 检查页面可写性并提权
-    if (mprotect(reinterpret_cast<void*>(page_start), protect_len, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+        if (mprotect(reinterpret_cast<void*>(page_start), protect_len, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
       return false;
     }
 
     *reinterpret_cast<volatile int32_t*>(target_addr) = val;
 
-    // 恢复常规读写权限
-    mprotect(reinterpret_cast<void*>(page_start), protect_len, PROT_READ | PROT_WRITE);
+        mprotect(reinterpret_cast<void*>(page_start), protect_len, PROT_READ | PROT_WRITE);
     return true;
   }
 
@@ -297,8 +316,7 @@ namespace mihoyo_fps {
         int32_t disp = *reinterpret_cast<const int32_t*>(insn + 2);
         uintptr_t target_addr = reinterpret_cast<uintptr_t>(insn + 6 + disp);
 
-        // 验证地址对齐与当前数值在合理区间 (20 - 360)
-        if (target_addr != 0 && (target_addr % sizeof(int32_t) == 0)) {
+                if (target_addr != 0 && (target_addr % sizeof(int32_t) == 0)) {
           int32_t current_val = *reinterpret_cast<const int32_t*>(target_addr);
           if (current_val >= 20 && current_val <= 360) {
             return reinterpret_cast<int32_t*>(target_addr);
@@ -339,13 +357,12 @@ namespace mihoyo_fps {
       char sec_name[9] = {0};
       std::memcpy(sec_name, sec_hdrs[i].Name, 8);
 
-      // 重点扫描 il2cpp 节、.text 节或包含代码的节
-      if (std::strcmp(sec_name, "il2cpp") == 0 || std::strcmp(sec_name, ".text") == 0 ||
+            if (std::strcmp(sec_name, "il2cpp") == 0 || std::strcmp(sec_name, ".text") == 0 ||
           (sec_hdrs[i].Characteristics & 0x20000020)) {
         uintptr_t sec_vaddr = pe_base + sec_hdrs[i].VirtualAddress;
         size_t sec_vsize = sec_hdrs[i].VirtualSize;
 
-        // 优先匹配星穹铁道及 Unity 通用 targetFrameRate 计算点
+        // 匹配首选特征签名
         auto hsr_matches = scan_memory_all(sec_vaddr, sec_vsize, hsr_pattern);
         for (uintptr_t match : hsr_matches) {
           int32_t* p_fps = resolve_framerate_pointer_from_hsr_pattern(match);
@@ -356,7 +373,7 @@ namespace mihoyo_fps {
           }
         }
 
-        // 备选匹配原神 il2cpp 调用点
+        // 匹配备选特征签名
         auto call_matches = scan_memory_all(sec_vaddr, sec_vsize, call_pattern);
         for (uintptr_t match : call_matches) {
           int32_t* p_fps = resolve_framerate_pointer_from_callsite(match);
@@ -373,18 +390,15 @@ namespace mihoyo_fps {
   }
 
   /**
-   * @brief 在进程内存空间中寻找米哈游游戏的全局帧率目标地址
+   * @brief 扫描已加载模块并解析米哈游游戏帧率限制变量指针。
    *
-   * 依次检索:
-   * 1. UnityPlayer.dll (星穹铁道等独立引擎 DLL 架构)
-   * 2. 游戏主程序 (原神等单体整合架构)
-   * 3. 内存可执行映射段保底扫描 (应对 Wine/Proton 虚拟段重映射)
+   * @return 成功解析返回目标变量指针，失败返回 nullptr。
    */
   inline int32_t* find_target_framerate_address() {
     auto regions = parse_process_maps();
     if (regions.empty()) return nullptr;
 
-    // 1. 尝试检索 UnityPlayer.dll 基址 (星穹铁道主要逻辑位于此)
+    // 1. 检索 UnityPlayer.dll 模块基址
     for (const auto& reg : regions) {
       if (reg.pathname.find("UnityPlayer.dll") != std::string::npos && reg.is_readable()) {
         const auto* dos_hdr = reinterpret_cast<const PeDosHeader*>(reg.start_addr);
@@ -395,7 +409,7 @@ namespace mihoyo_fps {
       }
     }
 
-    // 2. 尝试检索游戏主程序 EXE (原神等单体整合架构)
+    // 2. 检索主程序模块基址
     for (const auto& reg : regions) {
       if (reg.start_addr >= 0x140000000 && reg.is_readable() &&
           (reg.pathname.find(".exe") != std::string::npos ||
@@ -409,7 +423,7 @@ namespace mihoyo_fps {
       }
     }
 
-    // 3. 备选方案：遍历进程中所有可执行段进行特征扫描 (应对 Wine 内存重映射)
+    // 3. 遍历可执行内存段扫描特征
     SignaturePattern hsr_pattern("66 0F 6E 05 ? ? ? ? F2 0F 10 3D ? ? ? ? 0F 5B C0");
     SignaturePattern call_pattern("B9 3C 00 00 00 E8");
 
@@ -449,6 +463,9 @@ namespace mihoyo_fps {
   /**
    * @brief 启动米哈游帧率解锁与防重置常驻守护服务
    */
+  /**
+   * @brief 启动后台守护线程，周期性扫描并写入目标帧率以防游戏引擎重置。
+   */
   inline void start_fps_unlock_service() {
     if (!game_logger::is_fps_unlock_enabled()) {
       return;
@@ -471,7 +488,7 @@ namespace mihoyo_fps {
 
       int32_t* p_fps = nullptr;
 
-      // 前期阶段轮询定位目标地址 (至多尝试 45 轮，每轮间隔 2 秒)
+      // 轮询定位目标地址
       for (int attempt = 1; attempt <= 45; ++attempt) {
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
@@ -496,7 +513,7 @@ namespace mihoyo_fps {
         return;
       }
 
-      // 常驻轻量守护：每 500ms 检查一次，游戏切图/重新进入菜单将帧率回退为 60 或 30 时自动恢复
+      // 周期检测并在变量偏离目标值时重新写入
       while (get_service_running().load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 

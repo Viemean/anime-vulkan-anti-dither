@@ -24,9 +24,12 @@ namespace mihoyo_dxvk {
   }
 
   /**
-   * @brief 片段着色器反虚化处理
+   * @brief 米哈游系列游戏 DXVK 片段着色器反虚化处理。
+   * 扫描 4x4 Bayer 矩阵常数，移除依赖网点噪声的 discard 与 demote 指令，保留材质常规镂空。
    *
-   * 检查着色器中的 4x4 Bayer 矩阵特征常数，移除依赖该噪声的 discard 与 demote 指令，保留非依赖的纹理裁剪。
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   * @param game_tag 诊断日志前缀标识字符串。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count, const char* game_tag = "MIHOYO") {
     if (!spirv_code || word_count < 5)
@@ -286,7 +289,12 @@ namespace mihoyo_dxvk {
   }
 
   /**
-   * @brief 顶点着色器几何坍缩消除流水线
+   * @brief 米哈游系列游戏 DXVK 顶点着色器几何坍缩消除处理。
+   * 扫描并移除特定异常折叠常数，防止模型近景顶点塌陷。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   * @param game_tag 诊断日志前缀标识字符串。
    */
   inline void process_vertex_shader(uint32_t* spirv_code, size_t word_count, const char* game_tag = "MIHOYO") {
     if (!spirv_code || word_count < 5)

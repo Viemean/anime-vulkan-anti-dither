@@ -31,7 +31,14 @@ namespace azur_promilia_layer {
    *   Noise = Fract(Fract(dot(SV_POSITION.xy, v)) * 52.9829178)
    * 引擎在半虚化状态下会计算平滑淡出权重 FadeWeight 并乘入漫反射光照颜色中。
    * 本函数基于 SSA 拓扑追溯将 FadeThreshold 变量安全解耦置为 1.0f，同时中和散斑丢弃分支，
-   * 彻底根治半虚化状态下的网点残留与角色全身发黑变色，并 100% 保护非散斑的材质常规镂空。
+   * 消除角色半虚化状态下的网点残留并校正消隐系数，保留常规材质镂空。
+   */
+  /**
+   * @brief 《蓝色星原：旅谣》(Azur Promilia) 片段着色器反虚化处理。
+   * 追踪 Alpha 阈值与网点丢弃结构，中和网点并将半透明衰减系数置为 1.0f。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)

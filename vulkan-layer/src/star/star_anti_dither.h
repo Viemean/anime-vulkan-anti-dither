@@ -40,6 +40,12 @@ namespace star_layer {
   /**
    * @brief 《星痕共鸣》（Star）着色器分发入口
    */
+  /**
+   * @brief 《星之破晓》(Star) 着色器反虚化分发入口。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     auto stage = detect_shader_stage(spirv_code, word_count);
     if (stage == ShaderStage::Fragment) {

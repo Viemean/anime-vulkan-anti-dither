@@ -13,7 +13,11 @@ namespace zmd_layer {
   };
 
   /**
-   * @brief 精确识别着色器是否由 DXVK (DX11 翻译层) 生成
+   * @brief 判定 SPIR-V 着色器是否由 DXVK (DirectX 11) 翻译层生成。
+   *
+   * @param spirv_code SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   * @return 由 DXVK 生成返回 true；原生 Vulkan 生成返回 false。
    */
   inline bool is_dxvk_translation_layer(const uint32_t* spirv_code, size_t word_count) {
     if (word_count < 5)
@@ -90,6 +94,13 @@ namespace zmd_layer {
 
   /**
    * @brief 《明日方舟：终末地》（Arknights: Endfield / ZMD）着色器分发入口
+   */
+  /**
+   * @brief 《明日方舟：终末地》(ZMD) 着色器分发入口。
+   * 自动探测翻译层类型，分发至 DXVK 或原生 Vulkan 处理逻辑。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     auto stage = detect_shader_stage(spirv_code, word_count);

@@ -11,6 +11,13 @@ namespace zzz_vkd3d {
   /**
    * @brief ZZZ VKD3D (DirectX 12) 片元着色器反虚化处理
    */
+  /**
+   * @brief 绝区零 VKD3D (DirectX 12) 片元着色器反虚化处理。
+   * 扫描 Bayer 4x4 抖动矩阵并消除对应 helper 调用，保留常规材质镂空。
+   *
+   * @param spirv_code SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_fragment_shader(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;

@@ -55,8 +55,14 @@ namespace star_dxvk {
    * 算法核心：
    * 1. 多特征锚点嗅探：覆盖 4x4 / 8x8 Bayer 矩阵 (17.0f, 1/17.0f, 1/16.0f, 16.0f)、
    *    DXVK Immediate Constant Buffer (icb) 以及屏幕坐标 FragCoord；
-   * 2. SSA 双向数据流追踪：严格跟踪纹理采样依赖 (depends_on_sample)，100% 保护草地植被与镂空材质；
+   * 2. SSA 双向数据流追踪：跟踪纹理采样依赖 (depends_on_sample)，保留草地植被与镂空材质；
    * 3. CFG 安全中和：重定向 OpKill 前驱分支跳转目标以维持 Terminator 完整性，OpDemote 替换为 NOP。
+   */
+  /**
+   * @brief 《星之破晓》(Star) DXVK 片段着色器反虚化处理。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)

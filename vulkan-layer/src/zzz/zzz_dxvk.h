@@ -29,6 +29,13 @@ namespace zzz_dxvk {
    * ZZZ 在 DX11 下通过 Immediate Constant Buffer (icb) 存储 4x4 Bayer 抖动矩阵。
    * 追踪受 icb 驱动的丢弃指令 (OpDemote / OpKill) 并安全中和，同时保护材质常规 Alpha 裁剪。
    */
+  /**
+   * @brief 绝区零 DXVK (DirectX 11) 片段着色器反虚化处理。
+   * 追踪受 icb 驱动的丢弃指令并安全中和，保留常规 Alpha 裁剪。
+   *
+   * @param spirv_code SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     if (!spirv_code || word_count < 5)
       return;
@@ -269,10 +276,12 @@ namespace zzz_dxvk {
   }
 
   /**
-   * @brief 绝区零 DXVK (DirectX 11) 顶点着色器几何坍缩消除分发
+   * @brief 绝区零 DXVK (DirectX 11) 顶点着色器几何坍缩消除接口 (空操作保留)。
+   *
+   * @param spirv_code 顶点着色器字节码指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_vertex_shader(uint32_t* spirv_code, size_t word_count) {
-    // 预留顶点坍缩处理接口
     (void)spirv_code;
     (void)word_count;
   }

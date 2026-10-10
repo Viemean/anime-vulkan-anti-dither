@@ -14,7 +14,11 @@ namespace zzz_layer {
   };
 
   /**
-   * @brief 精确识别着色器是由 DXVK (DX11) 还是 VKD3D-Proton (DX12) 翻译生成
+   * @brief 判定 SPIR-V 着色器是否由 DXVK (DirectX 11) 翻译层生成。
+   *
+   * @param spirv_code SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
+   * @return 由 DXVK 生成返回 true；由 VKD3D-Proton 生成返回 false。
    */
   inline bool is_dxvk_translation_layer(const uint32_t* spirv_code, size_t word_count) {
     if (word_count < 5)
@@ -102,6 +106,13 @@ namespace zzz_layer {
 
   /**
    * @brief 绝区零着色器反虚化分发入口
+   */
+  /**
+   * @brief 绝区零着色器反虚化分发入口。
+   * 自动探测翻译层架构，分发至 DXVK 或 VKD3D 处理逻辑。
+   *
+   * @param spirv_code 欲处理的 SPIR-V 32 位字数组指针。
+   * @param word_count 字节码包含的 32 位字数量。
    */
   inline void process_spirv_anti_dither(uint32_t* spirv_code, size_t word_count) {
     bool is_dxvk = is_dxvk_translation_layer(spirv_code, word_count);
