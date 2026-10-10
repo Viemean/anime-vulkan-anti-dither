@@ -559,10 +559,8 @@ namespace wuwa_dxvk {
             uint32_t survivor_op = 0;
             if (op1_dither ^ op2_dither) {
               uint32_t cand = op1_dither ? op2 : op1;
-              bool cand_sample = op1_dither ? op2_sample : op1_sample;
-              bool cand_dither = op1_dither ? op2_dither : op1_dither;
-              // 校验解耦候选操作数是否来源于纹理采样
-              if (cand_sample && !cand_dither) {
+              // 若候选操作数为纯屏幕空间投影遮罩且无纹理采样，则非纹理镂空
+              if (!(op1_dither ? (op2_frag && !op2_sample) : (op1_frag && !op1_sample))) {
                 survivor_op = cand;
               }
             } else if (has_dither_signature) {
