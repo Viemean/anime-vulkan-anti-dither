@@ -239,7 +239,10 @@ namespace wuwa_dxvk {
       }
     }
 
-    if ((is_foliage_lod_shader || is_particle_effect_shader) && !is_force_mode) {
+    // 场景静态网格与几何着色器字长 >= 24000，属于 LOD 裁剪，予以保留
+    bool is_world_lod_shader = (word_count >= 24000);
+
+    if ((is_foliage_lod_shader || is_particle_effect_shader || is_world_lod_shader) && !is_force_mode) {
         return;
     }
 
