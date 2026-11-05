@@ -13,6 +13,7 @@
 #include "tof/tof_anti_dither.h"
 #include "dna/dna_anti_dither.h"
 #include "star/star_anti_dither.h"
+#include "silver_palace/silver_palace_anti_dither.h"
 
 #include "../addon/nte/memory_patcher.h"
 #include "../addon/fps_unlock/mihoyo/mihoyo_fps_unlock.h"
@@ -66,6 +67,9 @@ namespace game_core {
     };
     const char* const kKeywordsStar[] = {
       "Star", "Star-Win64", "StarGame", "星痕共鸣", nullptr
+    };
+    const char* const kKeywordsSilverPalace[] = {
+      "SilverPalaceClient-Win64-Shipping", "SilverPalaceClient", "SilverPalace", nullptr
     };
 
     // --------------------------------------------------------------------------
@@ -124,6 +128,15 @@ namespace game_core {
     // 静态注册表定义
     // --------------------------------------------------------------------------
     const GameProfile kProfiles[] = {
+      {
+        GameId::SilverPalace,
+        "Silver Palace",
+        kKeywordsSilverPalace,
+        silver_palace_layer::process_spirv_anti_dither,
+        nullptr,
+        nullptr,
+        nullptr
+      },
       {
         GameId::WuWa,
         "Wuthering Waves",

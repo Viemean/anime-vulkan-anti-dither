@@ -21,6 +21,7 @@ namespace game_core {
     TOF,
     DNA,
     Star,
+    SilverPalace,
   };
 
   /**

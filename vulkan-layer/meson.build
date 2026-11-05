@@ -160,3 +160,11 @@ game_registry_test = executable('game_registry_test',
 )
 test('game_registry_test', game_registry_test)
 
+silver_palace_anti_dither_test = executable('silver_palace_anti_dither_test',
+  'test/test_silver_palace_anti_dither.cpp',
+  link_with : [game_core_lib],
+  dependencies : [vulkan_headers_dep],
+  cpp_args : test_common_args
+)
+test('silver_palace_anti_dither_test', silver_palace_anti_dither_test)
+

@@ -31,6 +31,7 @@ void test_all_game_profiles_matched() {
     {"QRSL.exe", game_core::GameId::TOF, "Tower of Fantasy", true, false, false},
     {"EM-Win64-Shipping.exe", game_core::GameId::DNA, "Duet Night Abyss", true, false, false},
     {"Star.exe", game_core::GameId::Star, "Star", true, false, false},
+    {"SilverPalaceClient-Win64-Shipping.exe", game_core::GameId::SilverPalace, "Silver Palace", true, false, false},
   };
 
   for (const auto& c : cases) {
@@ -47,7 +48,7 @@ void test_all_game_profiles_matched() {
     (void)profile;
   }
 
-  std::cout << "PASSED (All 12 Profiles verified)\n";
+  std::cout << "PASSED (All 13 Profiles verified)\n";
 }
 
 // 验证路径隔离与短词匹配边界 (非目标进程不匹配)
