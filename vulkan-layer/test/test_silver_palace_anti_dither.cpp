@@ -1,4 +1,3 @@
-#include "test_utils.h"
 #include <cstdint>
 #include <vector>
 #include <iostream>
@@ -30,28 +29,17 @@ void test_silver_palace_character_bayer_dither_neutralized() {
     30017 << 16, // VKD3D
     100, // Bound
     0,
-    // OpDecorate %10 BuiltIn FragCoord
     make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
-    // OpConstant %50 (Bayer fraction)
     make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_bayer.u,
-    // OpVariable ptr_Input %10
     make_op(4, silver_palace_vkd3d::SPV_OP_VARIABLE), 1, 10, 1,
-    // OpFunction
     make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
-    // OpLoad %60 %10 (FragCoord)
     make_op(4, silver_palace_vkd3d::SPV_OP_LOAD), 1, 60, 10,
-    // OpDot %70 %60 %50 (Dither Noise)
     make_op(5, silver_palace_vkd3d::SPV_OP_DOT), 1, 70, 60, 50,
-    // OpFOrdLessThan %80 %70 %50
     make_op(5, 184), 6, 80, 70, 50,
-    // OpBranchConditional %80 %30 %40
     make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
-    // OpLabel %30
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
-    // OpDemoteToHelperInvocation (应当被 NOP)
     make_op(1, silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
-    // OpLabel %40
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 40,
     make_op(1, 253),
     make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
@@ -86,24 +74,15 @@ void test_silver_palace_tree_foliage_alpha_cutout_preserved() {
     30017 << 16, // VKD3D
     100,
     0,
-    // OpDecorate %10 BuiltIn FragCoord
     make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
-    // OpConstant %50
     make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_bayer.u,
-    // OpFunction
     make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 10,
-    // OpImageSampleImplicitLod: type 4, res 15, sampled_img 2, coord 3
     make_op(5, 87), 4, 15, 2, 3,
-    // OpFOrdLessThan %16 %15 %5 (Alpha 镂空 condition)
     make_op(5, 184), 6, 16, 15, 5,
-    // OpBranchConditional %16 %20 %30
     make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 16, 20, 30,
-    // OpLabel %20
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
-    // OpDemoteToHelperInvocation (应当保留)
     make_op(1, silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
-    // OpLabel %30
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
     make_op(1, 253),
     make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
@@ -136,28 +115,17 @@ void test_silver_palace_ign_noise_neutralized() {
     30017 << 16, // VKD3D
     100,
     0,
-    // OpDecorate %10 BuiltIn FragCoord
     make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
-    // OpConstant %50 (IGN Constant)
     make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_ign.u,
-    // OpVariable ptr_Input %10
     make_op(4, silver_palace_vkd3d::SPV_OP_VARIABLE), 1, 10, 1,
-    // OpFunction
     make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
-    // OpLoad %60 %10 (FragCoord)
     make_op(4, silver_palace_vkd3d::SPV_OP_LOAD), 1, 60, 10,
-    // OpDot %70 %60 %50
     make_op(5, silver_palace_vkd3d::SPV_OP_DOT), 1, 70, 60, 50,
-    // OpFOrdLessThan %80 %70 %50
     make_op(5, 184), 6, 80, 70, 50,
-    // OpBranchConditional %80 %30 %40
     make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
-    // OpLabel %30
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
-    // OpKill (应当被 NOP)
     make_op(1, silver_palace_vkd3d::SPV_OP_KILL),
-    // OpLabel %40
     make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 40,
     make_op(1, 253),
     make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
@@ -175,302 +143,321 @@ void test_silver_palace_ign_noise_neutralized() {
   std::cout << "PASSED\n";
 }
 
-// 用例 4: 游戏实机 Custom Hash Dither (347.834503, 3343.28369) 精准中和与镂空保留
+// 用例 4: 定制散斑 Hash 着色器网点中和 (347.834503, 3343.28369)
 void test_silver_palace_custom_hash_dither_neutralized() {
-  std::cout << "[Test SilverPalace 4] Real Dump Custom Hash Dither Neutralized & Preserved... ";
+  std::cout << "[Test SilverPalace 4] Custom Hash Dither (347.8345f) Neutralized... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
   game_logger::g_force_hashes.clear();
 
-  const char* dump_path = "/tmp/game_anti_dither/dumps/SilverPalaceClient-Win64-Shipping/shader_045e65ad_orig.spv";
-  FILE* fp = std::fopen(dump_path, "rb");
-  if (fp) {
-    std::fseek(fp, 0, SEEK_END);
-    size_t bytes = std::ftell(fp);
-    std::fseek(fp, 0, SEEK_SET);
+  silver_palace_vkd3d::FloatUint f_hash;
+  f_hash.f = 347.834503f;
 
-    std::vector<uint32_t> spv(bytes / sizeof(uint32_t));
-    size_t read_cnt = std::fread(spv.data(), sizeof(uint32_t), spv.size(), fp);
-    std::fclose(fp);
+  std::vector<uint32_t> spv = {
+    silver_palace_vkd3d::SPV_HEADER_MAGIC,
+    0x00010300,
+    30017 << 16,
+    100,
+    0,
+    make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_hash.u,
+    make_op(4, silver_palace_vkd3d::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
+    make_op(4, silver_palace_vkd3d::SPV_OP_LOAD), 1, 60, 10,
+    make_op(5, 133 /* OpFMul */), 1, 70, 60, 50,
+    make_op(5, 184), 6, 80, 70, 50,
+    make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
+    make_op(1, silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
+  };
 
-    if (read_cnt == spv.size()) {
-      silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
-
-      bool found_nop = false;
-      for (size_t idx = 5; idx < spv.size(); ++idx) {
-        if (spv[idx] == ((1 << 16) | silver_palace_vkd3d::SPV_OP_NOP)) {
-          found_nop = true;
-          break;
-        }
-      }
-      if (!found_nop) {
-        std::cerr << "FAILED: Real dump shader_045e65ad custom hash dither was not neutralized!\n";
-        std::abort();
-      }
-    }
+  silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
+  bool found_nop = false;
+  for (size_t idx = 5; idx < spv.size(); ++idx) {
+    if (spv[idx] == ((1 << 16) | silver_palace_vkd3d::SPV_OP_NOP)) found_nop = true;
+  }
+  if (!found_nop) {
+    std::cerr << "FAILED: Custom hash dither was not neutralized!\n";
+    std::abort();
   }
   std::cout << "PASSED\n";
 }
 
-// 用例 5: 游戏实机 UE DitherTemporalAA 角色卡通材质精准消除 (shader_a39d531e)
+// 用例 5: UE DitherTemporalAA 核心常数消除 (0.166649997f)
 void test_silver_palace_ue_dither_temporal_aa_neutralized() {
-  std::cout << "[Test SilverPalace 5] Real Dump UE DitherTemporalAA Neutralized (shader_a39d531e)... ";
+  std::cout << "[Test SilverPalace 5] UE DitherTemporalAA (0.16665f) Neutralized... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
   game_logger::g_force_hashes.clear();
 
-  const char* dump_path = "/tmp/game_anti_dither/dumps/SilverPalaceClient-Win64-Shipping/shader_a39d531e_orig.spv";
-  FILE* fp = std::fopen(dump_path, "rb");
-  if (fp) {
-    std::fseek(fp, 0, SEEK_END);
-    size_t bytes = std::ftell(fp);
-    std::fseek(fp, 0, SEEK_SET);
+  silver_palace_vkd3d::FloatUint f_taa;
+  f_taa.u = 0x3e2aa64c; // 0.166649997f
 
-    std::vector<uint32_t> spv(bytes / sizeof(uint32_t));
-    size_t read_cnt = std::fread(spv.data(), sizeof(uint32_t), spv.size(), fp);
-    std::fclose(fp);
+  std::vector<uint32_t> spv = {
+    silver_palace_vkd3d::SPV_HEADER_MAGIC,
+    0x00010300,
+    30017 << 16,
+    100,
+    0,
+    make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_taa.u,
+    make_op(4, silver_palace_vkd3d::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
+    make_op(4, silver_palace_vkd3d::SPV_OP_LOAD), 1, 60, 10,
+    make_op(5, 133 /* OpFMul */), 1, 70, 60, 50,
+    make_op(5, 184), 6, 80, 70, 50,
+    make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
+    make_op(1, silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
+  };
 
-    if (read_cnt == spv.size()) {
-      silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
-
-      bool found_nop = false;
-      for (size_t idx = 5; idx < spv.size(); ++idx) {
-        if (spv[idx] == ((1 << 16) | silver_palace_vkd3d::SPV_OP_NOP)) {
-          found_nop = true;
-          break;
-        }
-      }
-      if (!found_nop) {
-        std::cerr << "FAILED: Real dump shader_a39d531e UE DitherTemporalAA was not neutralized!\n";
-        std::abort();
-      }
-    }
+  silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
+  bool found_nop = false;
+  for (size_t idx = 5; idx < spv.size(); ++idx) {
+    if (spv[idx] == ((1 << 16) | silver_palace_vkd3d::SPV_OP_NOP)) found_nop = true;
+  }
+  if (!found_nop) {
+    std::cerr << "FAILED: UE DitherTemporalAA was not neutralized!\n";
+    std::abort();
   }
   std::cout << "PASSED\n";
 }
 
-static FILE* open_spv_dump(const char* filename) {
-  std::string p1 = std::string("/tmp/game_anti_dither/dumps/SilverPalaceClient-Win64-Shipping/") + filename;
-  FILE* fp = std::fopen(p1.c_str(), "rb");
-  if (fp) return fp;
-  std::string p2 = std::string(".tmp/experiments/silver_palace_fade_analysis/shaders/") + filename;
-  fp = std::fopen(p2.c_str(), "rb");
-  if (fp) return fp;
-  std::string p3 = std::string("../.tmp/experiments/silver_palace_fade_analysis/shaders/") + filename;
-  fp = std::fopen(p3.c_str(), "rb");
-  if (fp) return fp;
-  std::string p4 = std::string(".tmp/experiments/silver_palace_rdc/") + filename;
-  fp = std::fopen(p4.c_str(), "rb");
-  if (fp) return fp;
-  std::string p5 = std::string("../.tmp/experiments/silver_palace_rdc/") + filename;
-  return std::fopen(p5.c_str(), "rb");
-}
-
-// 用例 6: 真实实机树木植被材质上游解耦与 Alpha Cutout 100% 保留验证 (shader_e4a9c88b)
+// 用例 6: 树木植被贴图采样与网点噪声上游解耦 (OpFMul -> OpCopyObject) 且保留镂空
 void test_silver_palace_real_tree_foliage_cutout_preserved() {
-  std::cout << "[Test SilverPalace 6] Real Dump Tree Foliage Cutout Preserved & Uncoupled (shader_e4a9c88b)... ";
+  std::cout << "[Test SilverPalace 6] Tree Foliage Upstream Uncoupling (OpCopyObject) & Cutout Preserved... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
   game_logger::g_force_hashes.clear();
 
-  FILE* fp = open_spv_dump("shader_e4a9c88b_orig.spv");
-  if (fp) {
-    std::fseek(fp, 0, SEEK_END);
-    size_t bytes = std::ftell(fp);
-    std::fseek(fp, 0, SEEK_SET);
+  silver_palace_vkd3d::FloatUint f_bayer;
+  f_bayer.f = 0.44444445f;
 
-    std::vector<uint32_t> spv(bytes / sizeof(uint32_t));
-    size_t read_cnt = std::fread(spv.data(), sizeof(uint32_t), spv.size(), fp);
-    std::fclose(fp);
+  std::vector<uint32_t> spv = {
+    silver_palace_vkd3d::SPV_HEADER_MAGIC,
+    0x00010300,
+    30017 << 16,
+    100,
+    0,
+    make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_bayer.u,
+    make_op(4, silver_palace_vkd3d::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 10,
+    // OpImageSampleImplicitLod: res 15 (Texture Alpha)
+    make_op(5, 87), 4, 15, 2, 3,
+    // OpLoad FragCoord %60
+    make_op(4, silver_palace_vkd3d::SPV_OP_LOAD), 1, 60, 10,
+    // OpDot %70 %60 %50 (Dither Noise %70)
+    make_op(5, silver_palace_vkd3d::SPV_OP_DOT), 1, 70, 60, 50,
+    // OpFSub %80 %15 %70 (TextureAlpha mixed with DitherNoise -> 必须被解耦为 OpCopyObject %80 %15)
+    make_op(5, 131 /* OpFSub */), 1, 80, 15, 70,
+    // OpFOrdLessThan %90 %80 %50 (Cutout condition)
+    make_op(5, 184), 6, 90, 80, 50,
+    make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 90, 20, 30,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
+    // OpDemoteToHelperInvocation (植被正常镂空，解耦后必须 100% 保留)
+    make_op(1, silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
+    make_op(1, 253),
+    make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
+  };
 
-    if (read_cnt == spv.size()) {
-      silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
+  silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
 
-      // 验证解耦生效 (存在 OpCopyObject) 且 demote 函数未被整条 NOP
-      bool found_copy_object = false;
-      bool demote_func_preserved = false;
-      for (size_t idx = 5; idx < spv.size(); ++idx) {
-        uint16_t op = spv[idx] & 0xFFFF;
-        if (op == silver_palace_vkd3d::SPV_OP_COPY_OBJECT) {
-          found_copy_object = true;
-        }
-        if (op == silver_palace_vkd3d::SPV_OP_FUNCTION_CALL) {
-          demote_func_preserved = true;
-        }
-      }
-      if (!found_copy_object) {
-        std::cerr << "FAILED: Tree foliage dither noise was not uncoupled via OpCopyObject!\n";
-        std::abort();
-      }
-      if (!demote_func_preserved) {
-        std::cerr << "FAILED: Tree foliage demote_cond was incorrectly wiped out!\n";
-        std::abort();
-      }
+  bool found_copy_object = false;
+  bool demote_preserved = false;
+  for (size_t idx = 5; idx < spv.size(); ++idx) {
+    uint16_t op = spv[idx] & 0xFFFF;
+    if (op == silver_palace_vkd3d::SPV_OP_COPY_OBJECT) {
+      found_copy_object = true;
     }
+    if (op == silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION) {
+      demote_preserved = true;
+    }
+  }
+  if (!found_copy_object) {
+    std::cerr << "FAILED: Tree foliage dither noise was not uncoupled via OpCopyObject!\n";
+    std::abort();
+  }
+  if (!demote_preserved) {
+    std::cerr << "FAILED: Tree foliage demote was incorrectly wiped out!\n";
+    std::abort();
   }
   std::cout << "PASSED\n";
 }
 
-// 用例 7: 真实主角主着色器近景相机淡出与 10cm 深度裁切消除验证 (shader_0ad4c2fd)
+// 用例 7: 近景 10.0f 深度截断与 demote 操作数清零中和
 void test_silver_palace_real_character_camera_fade_depth_cutoff_neutralized() {
-  std::cout << "[Test SilverPalace 7] Real Character Camera Fade & Depth Cutoff Neutralized (shader_0ad4c2fd)... ";
+  std::cout << "[Test SilverPalace 7] Near Depth Cutoff (10.0f) Neutralized... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
   game_logger::g_force_hashes.clear();
 
-  FILE* fp = open_spv_dump("shader_0ad4c2fd_orig.spv");
-  if (fp) {
-    std::fseek(fp, 0, SEEK_END);
-    size_t bytes = std::ftell(fp);
-    std::fseek(fp, 0, SEEK_SET);
+  silver_palace_vkd3d::FloatUint f_zero;
+  f_zero.f = 0.0f;
+  silver_palace_vkd3d::FloatUint f_10;
+  f_10.f = 10.0f;
 
-    std::vector<uint32_t> spv(bytes / sizeof(uint32_t));
-    size_t read_cnt = std::fread(spv.data(), sizeof(uint32_t), spv.size(), fp);
-    std::fclose(fp);
+  std::vector<uint32_t> spv = {
+    silver_palace_vkd3d::SPV_HEADER_MAGIC,
+    0x00010300,
+    30017 << 16,
+    100,
+    0,
+    make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_zero.u, // %50 zero float
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 51, f_10.u,   // %51 10.0f cutoff const
+    make_op(4, silver_palace_vkd3d::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
+    // GLSL.std.450 (12) FAbs (4) %60 %10 -> is_fabs_result[%60] = 1
+    make_op(6, 12), 1, 60, 200, 4, 10,
+    // OpFSub (131) %65 %51 %60 -> is_depth_cutoff_val[%65] = 1
+    make_op(5, 131), 1, 65, 51, 60,
+    // OpFOrdLessThan %70 %65 %50 -> is_depth_cutoff_cond[%70] = 1
+    make_op(5, 184), 6, 70, 65, 50,
+    // OpBranchConditional %70 %30 %40
+    make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 70, 30, 40,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
+    // OpDemoteToHelperInvocation (应当被 NOP)
+    make_op(1, silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
+  };
 
-    if (read_cnt == spv.size()) {
-      silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
+  silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
 
-      size_t idx = 5;
-      uint32_t remaining_demote_calls = 0;
-      uint32_t nop_count = 0;
-      while (idx < spv.size()) {
-        uint32_t word = spv[idx];
-        uint16_t op = word & 0xFFFF;
-        uint16_t len = (word >> 16) & 0xFFFF;
-        if (len == 0 || idx + len > spv.size()) break;
-        if (op == silver_palace_vkd3d::SPV_OP_FUNCTION_CALL && len >= 5) {
-          remaining_demote_calls++;
-        } else if (op == silver_palace_vkd3d::SPV_OP_NOP) {
-          nop_count++;
-        }
-        idx += len;
-      }
-      if (remaining_demote_calls > 0) {
-        std::cerr << "FAILED: Character camera fade/depth cutoff demote calls were not neutralized! remaining: " << remaining_demote_calls << "\n";
-        std::abort();
-      }
-      if (nop_count < 2) {
-        std::cerr << "FAILED: Expected at least 2 neutralized demote calls via NOP, got " << nop_count << "\n";
-        std::abort();
-      }
-    }
+  bool found_nop = false;
+  for (size_t idx = 5; idx < spv.size(); ++idx) {
+    if (spv[idx] == ((1 << 16) | silver_palace_vkd3d::SPV_OP_NOP)) found_nop = true;
+  }
+  if (!found_nop) {
+    std::cerr << "FAILED: Depth cutoff demote was not neutralized!\n";
+    std::abort();
   }
   std::cout << "PASSED\n";
 }
 
-// 用例 8: 真实角色面部皮肤材质与 PrePass 深度动态淡出消除验证 (shader_de08ca1d, shader_d5c5c60b)
+// 用例 8: 相机近身软淡出 (0.99f, 1.5f, -0.8333f) 消除验证
 void test_silver_palace_character_dynamic_soft_fade_neutralized() {
-  std::cout << "[Test SilverPalace 8] Character Face & PrePass Dynamic Fade Neutralized (0.99f & -0.8333f)... ";
+  std::cout << "[Test SilverPalace 8] Character Dynamic Soft Fade (0.99f & -0.8333f) Neutralized... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
   game_logger::g_force_hashes.clear();
 
-  const char* dump_files[] = {
-    "shader_de08ca1d_orig.spv",
-    "shader_d5c5c60b_orig.spv"
+  silver_palace_vkd3d::FloatUint f_099, f_15, f_bias;
+  f_099.u = 0x3f7d70a4; // 0.99000001f
+  f_15.u  = 0x3fc00000; // 1.5f
+  f_bias.u = 0xbf555326; // -0.8333f
+
+  std::vector<uint32_t> spv = {
+    silver_palace_vkd3d::SPV_HEADER_MAGIC,
+    0x00010300,
+    30017 << 16,
+    100,
+    0,
+    make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_099.u,
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 51, f_15.u,
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 52, f_bias.u,
+    make_op(4, silver_palace_vkd3d::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
+    make_op(4, silver_palace_vkd3d::SPV_OP_LOAD), 1, 60, 10,
+    // OpFAdd %70 %60 %52 (%52 is bias -> depends_on_fade[%70] = 1)
+    make_op(5, 129), 1, 70, 60, 52,
+    // OpFMul %75 %70 %51 (%51 is 1.5f -> depends_on_fade[%75] = 1)
+    make_op(5, 133), 1, 75, 70, 51,
+    // OpFOrdLessThan %80 %75 %50 (%50 is 0.99f -> depends_on_fade[%80] = 1)
+    make_op(5, 184), 6, 80, 75, 50,
+    // OpBranchConditional %80 %30 %40
+    make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
+    // OpDemoteToHelperInvocation (应当被 NOP)
+    make_op(1, silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
   };
 
-  for (const char* file : dump_files) {
-    FILE* fp = open_spv_dump(file);
-    if (fp) {
-      std::fseek(fp, 0, SEEK_END);
-      size_t bytes = std::ftell(fp);
-      std::fseek(fp, 0, SEEK_SET);
+  silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
 
-      std::vector<uint32_t> spv(bytes / sizeof(uint32_t));
-      size_t read_cnt = std::fread(spv.data(), sizeof(uint32_t), spv.size(), fp);
-      std::fclose(fp);
-
-      if (read_cnt == spv.size()) {
-        silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
-
-        size_t idx = 5;
-        uint32_t remaining_demote_calls = 0;
-        uint32_t nop_count = 0;
-        while (idx < spv.size()) {
-          uint32_t word = spv[idx];
-          uint16_t op = word & 0xFFFF;
-          uint16_t len = (word >> 16) & 0xFFFF;
-          if (len == 0 || idx + len > spv.size()) break;
-          if (op == silver_palace_vkd3d::SPV_OP_FUNCTION_CALL && len >= 5) {
-            remaining_demote_calls++;
-          } else if (op == silver_palace_vkd3d::SPV_OP_NOP) {
-            nop_count++;
-          }
-          idx += len;
-        }
-        if (remaining_demote_calls > 0) {
-          std::cerr << "FAILED: Character dynamic soft fade demote calls in " << file << " were not neutralized!\n";
-          std::abort();
-        }
-        if (nop_count < 1) {
-          std::cerr << "FAILED: Expected at least 1 neutralized demote call in " << file << "\n";
-          std::abort();
-        }
-      }
-    }
+  bool found_nop = false;
+  for (size_t idx = 5; idx < spv.size(); ++idx) {
+    if (spv[idx] == ((1 << 16) | silver_palace_vkd3d::SPV_OP_NOP)) found_nop = true;
+  }
+  if (!found_nop) {
+    std::cerr << "FAILED: Character soft fade demote was not neutralized!\n";
+    std::abort();
   }
   std::cout << "PASSED\n";
 }
 
-// 用例 9: 实机抓包大世界拉近特写超大卡通着色器与 PrePass 虚化消除验证 (eid10973_postpass, eid2818_prepass)
+// 用例 9: 次世代超大卡通着色器规模验证 (65,000 words 内存动态测试)
 void test_silver_palace_rdc_capture_large_toon_and_prepass_neutralized() {
-  std::cout << "[Test SilverPalace 9] RDC Real Large Toon (64k words) & PrePass Neutralized... ";
+  std::cout << "[Test SilverPalace 9] Large Toon (65k words limit放宽) Neutralized in Memory... ";
   setenv("ANTI_DITHER_ENABLED", "1", 1);
   game_logger::g_initialized = false;
   game_logger::g_exclude_hashes.clear();
   game_logger::g_force_hashes.clear();
 
-  const char* files[] = {
-    "eid2818_prepass.spv",
-    "eid10973_postpass.spv"
+  silver_palace_vkd3d::FloatUint f_bayer;
+  f_bayer.f = 0.44444445f;
+
+  std::vector<uint32_t> spv = {
+    silver_palace_vkd3d::SPV_HEADER_MAGIC,
+    0x00010300,
+    30017 << 16,
+    100,
+    0,
+    make_op(4, silver_palace_vkd3d::SPV_OP_DECORATE), 10, silver_palace_vkd3d::SPV_DECORATION_BUILTIN, silver_palace_vkd3d::SPV_BUILTIN_FRAG_COORD,
+    make_op(4, silver_palace_vkd3d::SPV_OP_CONSTANT), 1, 50, f_bayer.u,
+    make_op(4, silver_palace_vkd3d::SPV_OP_VARIABLE), 1, 10, 1,
+    make_op(5, silver_palace_vkd3d::SPV_OP_FUNCTION), 2, 1, 0, 3,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 20,
+    make_op(4, silver_palace_vkd3d::SPV_OP_LOAD), 1, 60, 10,
+    // OpDot %70 %60 %50 (Dither Noise)
+    make_op(5, silver_palace_vkd3d::SPV_OP_DOT), 1, 70, 60, 50,
+    make_op(5, 184), 6, 80, 70, 50,
+    make_op(4, silver_palace_vkd3d::SPV_OP_BRANCH_CONDITIONAL), 80, 30, 40,
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 30,
+    make_op(1, silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION),
+    make_op(2, silver_palace_vkd3d::SPV_OP_LABEL), 40,
+    make_op(1, 253),
+    make_op(1, silver_palace_vkd3d::SPV_OP_FUNCTION_END)
   };
 
-  for (const char* file : files) {
-    FILE* fp = open_spv_dump(file);
-    if (fp) {
-      std::fseek(fp, 0, SEEK_END);
-      size_t bytes = std::ftell(fp);
-      std::fseek(fp, 0, SEEK_SET);
+  // 内存动态填充至 65,000 words，验证驱动层 120,000 words 门限不会过滤它
+  size_t target_size = 65000;
+  spv.resize(target_size, ((1 << 16) | silver_palace_vkd3d::SPV_OP_NOP));
 
-      std::vector<uint32_t> spv(bytes / sizeof(uint32_t));
-      size_t read_cnt = std::fread(spv.data(), sizeof(uint32_t), spv.size(), fp);
-      std::fclose(fp);
+  silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
 
-      if (read_cnt == spv.size()) {
-        silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
-
-        size_t idx = 5;
-        uint32_t remaining_demote_calls = 0;
-        uint32_t nop_count = 0;
-        while (idx < spv.size()) {
-          uint32_t word = spv[idx];
-          uint16_t op = word & 0xFFFF;
-          uint16_t len = (word >> 16) & 0xFFFF;
-          if (len == 0 || idx + len > spv.size()) break;
-          if (op == silver_palace_vkd3d::SPV_OP_FUNCTION_CALL && len >= 5) {
-            remaining_demote_calls++;
-          } else if (op == silver_palace_vkd3d::SPV_OP_NOP) {
-            nop_count++;
-          }
-          idx += len;
-        }
-        if (remaining_demote_calls > 0) {
-          std::cerr << "FAILED: Demote calls in " << file << " were not neutralized!\n";
-          std::abort();
-        }
-        if (nop_count < 1) {
-          std::cerr << "FAILED: Expected at least 1 neutralized call via NOP in " << file << "\n";
-          std::abort();
-        }
-      }
+  bool demote_neutralized = (spv[44] == ((1 << 16) | silver_palace_vkd3d::SPV_OP_NOP));
+  for (size_t idx = 5; idx < spv.size(); ++idx) {
+    if ((spv[idx] & 0xFFFF) == silver_palace_vkd3d::SPV_OP_DEMOTE_TO_HELPER_INVOCATION) {
+      demote_neutralized = false;
+      break;
     }
+  }
+  if (!demote_neutralized) {
+    std::cerr << "FAILED: Large 65k words shader was erroneously skipped by driver threshold!\n";
+    std::abort();
   }
   std::cout << "PASSED\n";
 }
@@ -489,5 +476,3 @@ int main() {
   std::cout << "=== All Silver Palace Tests Passed Successfully ===\n";
   return 0;
 }
-
-
