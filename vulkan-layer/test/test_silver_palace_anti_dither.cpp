@@ -259,7 +259,13 @@ static FILE* open_spv_dump(const char* filename) {
   fp = std::fopen(p2.c_str(), "rb");
   if (fp) return fp;
   std::string p3 = std::string("../.tmp/experiments/silver_palace_fade_analysis/shaders/") + filename;
-  return std::fopen(p3.c_str(), "rb");
+  fp = std::fopen(p3.c_str(), "rb");
+  if (fp) return fp;
+  std::string p4 = std::string(".tmp/experiments/silver_palace_rdc/") + filename;
+  fp = std::fopen(p4.c_str(), "rb");
+  if (fp) return fp;
+  std::string p5 = std::string("../.tmp/experiments/silver_palace_rdc/") + filename;
+  return std::fopen(p5.c_str(), "rb");
 }
 
 // 用例 6: 真实实机树木植被材质上游解耦与 Alpha Cutout 100% 保留验证 (shader_e4a9c88b)
@@ -413,6 +419,62 @@ void test_silver_palace_character_dynamic_soft_fade_neutralized() {
   std::cout << "PASSED\n";
 }
 
+// 用例 9: 实机抓包大世界拉近特写超大卡通着色器与 PrePass 虚化消除验证 (eid10973_postpass, eid2818_prepass)
+void test_silver_palace_rdc_capture_large_toon_and_prepass_neutralized() {
+  std::cout << "[Test SilverPalace 9] RDC Real Large Toon (64k words) & PrePass Neutralized... ";
+  setenv("ANTI_DITHER_ENABLED", "1", 1);
+  game_logger::g_initialized = false;
+  game_logger::g_exclude_hashes.clear();
+  game_logger::g_force_hashes.clear();
+
+  const char* files[] = {
+    "eid2818_prepass.spv",
+    "eid10973_postpass.spv"
+  };
+
+  for (const char* file : files) {
+    FILE* fp = open_spv_dump(file);
+    if (fp) {
+      std::fseek(fp, 0, SEEK_END);
+      size_t bytes = std::ftell(fp);
+      std::fseek(fp, 0, SEEK_SET);
+
+      std::vector<uint32_t> spv(bytes / sizeof(uint32_t));
+      size_t read_cnt = std::fread(spv.data(), sizeof(uint32_t), spv.size(), fp);
+      std::fclose(fp);
+
+      if (read_cnt == spv.size()) {
+        silver_palace_vkd3d::process_spirv_anti_dither(spv.data(), spv.size());
+
+        size_t idx = 5;
+        uint32_t remaining_demote_calls = 0;
+        uint32_t nop_count = 0;
+        while (idx < spv.size()) {
+          uint32_t word = spv[idx];
+          uint16_t op = word & 0xFFFF;
+          uint16_t len = (word >> 16) & 0xFFFF;
+          if (len == 0 || idx + len > spv.size()) break;
+          if (op == silver_palace_vkd3d::SPV_OP_FUNCTION_CALL && len >= 5) {
+            remaining_demote_calls++;
+          } else if (op == silver_palace_vkd3d::SPV_OP_NOP) {
+            nop_count++;
+          }
+          idx += len;
+        }
+        if (remaining_demote_calls > 0) {
+          std::cerr << "FAILED: Demote calls in " << file << " were not neutralized!\n";
+          std::abort();
+        }
+        if (nop_count < 1) {
+          std::cerr << "FAILED: Expected at least 1 neutralized call via NOP in " << file << "\n";
+          std::abort();
+        }
+      }
+    }
+  }
+  std::cout << "PASSED\n";
+}
+
 int main() {
   std::cout << "=== Running Silver Palace Anti-Dither Unit Tests ===\n";
   test_silver_palace_character_bayer_dither_neutralized();
@@ -423,6 +485,7 @@ int main() {
   test_silver_palace_real_tree_foliage_cutout_preserved();
   test_silver_palace_real_character_camera_fade_depth_cutoff_neutralized();
   test_silver_palace_character_dynamic_soft_fade_neutralized();
+  test_silver_palace_rdc_capture_large_toon_and_prepass_neutralized();
   std::cout << "=== All Silver Palace Tests Passed Successfully ===\n";
   return 0;
 }

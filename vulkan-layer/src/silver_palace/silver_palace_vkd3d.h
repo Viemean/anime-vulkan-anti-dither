@@ -101,8 +101,8 @@ namespace silver_palace_vkd3d {
       return;
     }
 
-    // 着色器基础规模过滤 (角色卡通材质在 [400, 8500] 区间，排除 >12000 的全屏光照与后处理 UberShader)
-    if ((word_count < 20 || word_count > 12000) && !is_force_mode) {
+    // 着色器基础规模过滤 (放宽至 120000 以覆盖 UE5 复杂角色 Toon/Translucent 复合着色器，如 64,492 words)
+    if ((word_count < 20 || word_count > 120000) && !is_force_mode) {
       return;
     }
 
@@ -684,7 +684,7 @@ namespace silver_palace_vkd3d {
         uint32_t res_id = spirv_code[scan_i + 2];
         if (res_id < bound) {
           bool is_fade_or_depth = depends_on_fade[res_id] || is_depth_cutoff_cond[res_id];
-          bool is_pure_dither = is_dither_noise[res_id] && !depends_on_sample[res_id];
+          bool is_pure_dither = is_dither_noise[res_id];
           if (is_fade_or_depth || is_pure_dither) {
             if (false_const_id > 0 && false_const_id < bound) {
               spirv_code[scan_i] = (4 << 16) | SPV_OP_COPY_OBJECT;
@@ -734,7 +734,7 @@ namespace silver_palace_vkd3d {
             should_nop = true;
           } else if (arg_id < bound) {
             bool is_fade_or_depth = depends_on_fade[arg_id] || is_depth_cutoff_cond[arg_id];
-            bool is_pure_dither = is_dither_noise[arg_id] && !depends_on_sample[arg_id];
+            bool is_pure_dither = is_dither_noise[arg_id];
             if (is_fade_or_depth || is_pure_dither) {
               should_nop = true;
             }
@@ -762,7 +762,7 @@ namespace silver_palace_vkd3d {
             uint32_t cond = cond_for_label[current_label];
             if (cond > 0 && cond < bound) {
               bool is_fade_or_depth = depends_on_fade[cond] || is_depth_cutoff_cond[cond];
-              bool is_pure_dither = is_dither_noise[cond] && !depends_on_sample[cond];
+              bool is_pure_dither = is_dither_noise[cond];
               if (is_fade_or_depth || is_pure_dither) {
                 should_nop = true;
               }
