@@ -1,21 +1,25 @@
 # Vulkan Anti-Dither Layer & Game Patches
 
 ## 1. 项目说明
+
 通用二游反虚化Vulkan Layer
 
 ## 2. 工作原理
 
 ### 2.1 Vulkan 图形驱动层
+
 * 作为标准 Vulkan Implicit Layer 随 Vulkan Loader 自动注入游戏进程；
 * 拦截 `vkCreateShaderModule`，在翻译层（DXVK / VKD3D-Proton）生成 SPIR-V 字节码阶段注入处理流水线；
 * 运用反向切片追踪（Backward Demote Slicing）与 SSA 正反向级联数据流分析，解耦 `NMin` / `FMin` 中混叠的网格淡出噪声与屏幕空间面部投影遮罩，中和针对角色材质的 `OpKill` 与 `OpDemoteToHelperInvocation`。
 
 ### 2.2 Mod
+
 * 拦截 `vkCmdDrawIndexed` 原生渲染调用；
 * 依据渲染图元的几何特征（如 `indexCount` 索引计数）进行函数指针直调过滤；
 * 仅针对指定模型的独立绘制调用执行拦截跳过。
 
 ### 2.3 Addon
+
 * 承接 Vulkan 图形层无法处理的引擎内部状态限制；
 * 挂载于 Vulkan 逻辑设备创建生命周期（`on_device_created` 回调），在实例初始化并确认配置后拉起独立后台工作线程；
 * **利用动态链接库注入后与宿主游戏处于同一进程地址空间、具备完全同等内存读写权限的原理**，直接在宿主进程内存中执行特征码扫描，通过修改内存页属性单点写入热补丁，拦截视距剔除判断函数，或常驻写入目标帧率变量。
@@ -23,6 +27,7 @@
 ---
 
 ## 3. 运行环境与版本建议
+
 * **兼容运行环境**：建议保持使用最新的 **GE-Proton** 或 **DWProton**，以保证对 SPIR-V 扩展规范（如 `SPV_EXT_demote_to_helper_invocation`、`PhysicalStorageBufferAddresses`）的完整支持。
 
 ---
@@ -31,6 +36,7 @@
 
 | 游戏名称 | 英文标识 / 进程名关键字 | 翻译层后端 | 特性支持 |
 | :--- | :--- | :--- | :--- |
+| **白银之城 (Silver Palace)** | `SilverPalaceClient-Win64-Shipping`, `SilverPalace` | VKD3D | 反虚化 |
 | **鸣潮 (Wuthering Waves)** | `Client-Win64-Shipping`, `wuwa` | DXVK / VKD3D | 反虚化 |
 | **原神 (Genshin Impact)** | `GenshinImpact`, `YuanShen` | DXVK | 反虚化、帧率解锁 |
 | **崩坏：星穹铁道 (Honkai: Star Rail)** | `StarRail` | DXVK | 反虚化、帧率解锁 |
@@ -38,7 +44,7 @@
 | **崩坏3 (Honkai Impact 3rd)** | `BH3`, `HonkaiImpact3` | DXVK | 反虚化 |
 | **异环 (Neverness To Everness)** | `HTGame`, `HT-Win64` | DXVK / VKD3D | 反虚化、相机防裁剪补丁 |
 | **蓝色星原：旅谣 (Azur Promilia)** | `AzurPromilia`, `AP-Win64` | DXVK / VKD3D | 反虚化 |
-| **明日方舟：终末地 (Arknights: Endfield)**| `Endfield`, `zmd` | VULKAN / DXVK | 反虚化 |
+| **明日方舟：终末地 (Arknights: Endfield)** | `Endfield`, `zmd` | VULKAN / DXVK | 反虚化 |
 | **少女前线2：追放 (Girls' Frontline 2)** | `GF2_Exilium` | DXVK | 反虚化 |
 | **幻塔 (Tower of Fantasy)** | `QRSL`, `TowerOfFantasy` | DXVK / VKD3D | 反虚化 |
 | **二重螺旋 (Duet Night Abyss)** | `EM-Win64-Shipping`, `DNA` | DXVK / VKD3D | 反虚化，对游戏世界有一定破坏效果，会导致lod距离加载范围内树木变成卡片 |
