@@ -43,7 +43,7 @@
 | **绝区零 (Zenless Zone Zero)** | `ZenlessZoneZero`, `zzz` | DXVK | 反虚化 |
 | **崩坏3 (Honkai Impact 3rd)** | `BH3`, `HonkaiImpact3` | DXVK | 反虚化 |
 | **异环 (Neverness To Everness)** | `HTGame`, `HT-Win64` | DXVK / VKD3D | 反虚化、相机防裁剪补丁 |
-| **蓝色星原：旅谣 (Azur Promilia)** | `AzurPromilia`, `AP-Win64` | DXVK / VKD3D | 反虚化 |
+| **蓝色星原：旅谣 (Azur Promilia)** | `AzurPromilia`, `AP-Win64` | DXVK | 反虚化 |
 | **明日方舟：终末地 (Arknights: Endfield)** | `Endfield`, `zmd` | VULKAN / DXVK | 反虚化 |
 | **少女前线2：追放 (Girls' Frontline 2)** | `GF2_Exilium` | DXVK | 反虚化 |
 | **幻塔 (Tower of Fantasy)** | `QRSL`, `TowerOfFantasy` | DXVK / VKD3D | 反虚化 |
