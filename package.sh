@@ -44,21 +44,15 @@ mkdir -p "${OUT_DIR}"
 
 build_and_package_arch() {
     local target="$1"
-    local deb_arch=""
-    local deb_libdir=""
     local cross_needed=false
 
     case "${target}" in
         x86_64)
-            deb_arch="amd64"
-            deb_libdir="usr/lib/x86_64-linux-gnu"
             if [[ "${NATIVE_ARCH}" != "x86_64" ]]; then
                 cross_needed=true
             fi
             ;;
         aarch64)
-            deb_arch="arm64"
-            deb_libdir="usr/lib/aarch64-linux-gnu"
             if [[ "${NATIVE_ARCH}" != "aarch64" ]]; then
                 cross_needed=true
             fi
@@ -72,7 +66,7 @@ build_and_package_arch() {
     local build_dir="${VULKAN_DIR}/build-${target}"
     echo ""
     echo "=========================================================="
-    echo "==> 开始构建与打包: ${target} (Debian: ${deb_arch}, 版本: ${VERSION})"
+    echo "==> 开始构建与打包: ${target} (版本: ${VERSION})"
     echo "=========================================================="
 
     local meson_args=(
@@ -167,71 +161,8 @@ EOF
     chmod +x "${portable_dir}/install.sh" "${portable_dir}/uninstall.sh"
 
     # 打包通用便携包
-    echo "==> 打包通用便携包 (.tar.gz / .tar.zst)..."
+    echo "==> 打包通用便携包 (.tar.gz)..."
     tar -czf "${OUT_DIR}/vulkan-anti-dither-${VERSION}-${target}.tar.gz" -C "${tmp_pkg_dir}" vulkan-anti-dither
-
-    if command -v zstd >/dev/null 2>&1; then
-        tar -I 'zstd -19 -T0' -cf "${OUT_DIR}/vulkan-anti-dither-${VERSION}-${target}.tar.zst" -C "${tmp_pkg_dir}" vulkan-anti-dither
-    fi
-
-    # 构建 Debian 安装包
-    echo "==> 构建 Debian 安装包 (${deb_arch}.deb)..."
-    local deb_root="${tmp_pkg_dir}/deb-root"
-    mkdir -p "${deb_root}/DEBIAN"
-    mkdir -p "${deb_root}/${deb_libdir}"
-    mkdir -p "${deb_root}/usr/lib"
-    mkdir -p "${deb_root}/usr/share/vulkan/implicit_layer.d"
-    mkdir -p "${deb_root}/usr/share/doc/vulkan-anti-dither"
-
-    cp -f "${build_dir}/libwuwa_antidither_layer.so" "${deb_root}/${deb_libdir}/"
-    ln -sf "/${deb_libdir}/libwuwa_antidither_layer.so" "${deb_root}/usr/lib/libwuwa_antidither_layer.so"
-
-    sed 's|@LIBRARY_PATH@|libwuwa_antidither_layer.so|g' \
-        "${VULKAN_DIR}/manifest/VkLayer_WUWA_antidither.json.in" \
-        > "${deb_root}/usr/share/vulkan/implicit_layer.d/VkLayer_WUWA_antidither.json"
-
-    if [[ -f "${ROOT_DIR}/README.md" ]]; then
-        cp -f "${ROOT_DIR}/README.md" "${deb_root}/usr/share/doc/vulkan-anti-dither/"
-    fi
-
-    local installed_size
-    installed_size=$(du -sk "${deb_root}" | cut -f1)
-
-    cat > "${deb_root}/DEBIAN/control" <<EOF
-Package: vulkan-anti-dither
-Version: ${VERSION}
-Section: graphics
-Priority: optional
-Architecture: ${deb_arch}
-Maintainer: Viemean <https://github.com/Viemean/anime-vulkan-anti-dither>
-Installed-Size: ${installed_size}
-Depends: libc6 (>= 2.34), libvulkan1
-Description: Vulkan Anti-Dither Layer for Anime Games
- Universal Vulkan layer intercepting camera dithering discard instructions at runtime.
- Compatible with DXVK, VKD3D-Proton and native Vulkan games on Linux (${target}).
-EOF
-
-    cat > "${deb_root}/DEBIAN/postinst" <<'EOF'
-#!/bin/sh
-set -e
-ldconfig >/dev/null 2>&1 || true
-exit 0
-EOF
-    chmod 0755 "${deb_root}/DEBIAN/postinst"
-
-    cat > "${deb_root}/DEBIAN/postrm" <<'EOF'
-#!/bin/sh
-set -e
-ldconfig >/dev/null 2>&1 || true
-exit 0
-EOF
-    chmod 0755 "${deb_root}/DEBIAN/postrm"
-
-    if command -v dpkg-deb >/dev/null 2>&1; then
-        dpkg-deb --build --root-owner-group "${deb_root}" "${OUT_DIR}/vulkan-anti-dither_${VERSION}_${deb_arch}.deb"
-    else
-        echo "警告: 系统未找到 dpkg-deb 工具，跳过 .deb 构建"
-    fi
 
     rm -rf "${tmp_pkg_dir}"
     trap - RETURN
